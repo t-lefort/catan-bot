@@ -122,18 +122,33 @@ class GameState:
         Vérifie si un joueur peut placer une colonie sur un sommet.
 
         Règles:
+        - Le sommet doit être valide (sur le plateau)
         - Le sommet ne doit pas avoir de construction
         - Les sommets adjacents ne doivent pas avoir de construction (règle de distance)
         - En phase principale: doit être adjacent à une route du joueur
         """
-        # Vérifier qu'il n'y a pas déjà une construction
-        if vertex in self.settlements_on_board or vertex in self.cities_on_board:
+        # Vérifier que le sommet est valide (sur le plateau)
+        if not self.board.is_valid_vertex(vertex):
             return False
+
+        # Vérifier qu'il n'y a pas déjà une construction sur ce sommet
+        for existing_vertex in self.settlements_on_board:
+            if vertex.is_same_vertex(existing_vertex):
+                return False
+        for existing_vertex in self.cities_on_board:
+            if vertex.is_same_vertex(existing_vertex):
+                return False
 
         # Règle de distance: pas de construction sur les sommets adjacents
         for adj_vertex in vertex.adjacent_vertices():
-            if adj_vertex in self.settlements_on_board or adj_vertex in self.cities_on_board:
-                return False
+            # Vérifier les colonies (on vérifie tous les sommets, même ceux au bord du plateau)
+            for existing_vertex in self.settlements_on_board:
+                if adj_vertex.is_same_vertex(existing_vertex):
+                    return False
+            # Vérifier les villes
+            for existing_vertex in self.cities_on_board:
+                if adj_vertex.is_same_vertex(existing_vertex):
+                    return False
 
         # En phase principale, doit être adjacent à une route du joueur
         if self.game_phase == GamePhase.MAIN_GAME:
@@ -533,10 +548,15 @@ class GameState:
         for direction in range(6):
             vertex = VertexCoord(hex_coord, direction)
 
-            if vertex in self.settlements_on_board:
-                players.add(self.settlements_on_board[vertex])
-            elif vertex in self.cities_on_board:
-                players.add(self.cities_on_board[vertex])
+            # Vérifier les colonies
+            for existing_vertex, player_id in self.settlements_on_board.items():
+                if vertex.is_same_vertex(existing_vertex):
+                    players.add(player_id)
+
+            # Vérifier les villes
+            for existing_vertex, player_id in self.cities_on_board.items():
+                if vertex.is_same_vertex(existing_vertex):
+                    players.add(player_id)
 
         return players
 
@@ -841,6 +861,10 @@ class GameState:
         """
         player = self.players[player_id]
 
+        # Vérifier qu'une carte développement n'a pas déjà été jouée ce tour
+        if player.dev_card_played_this_turn:
+            return False
+
         # Vérifier que le joueur a la carte
         if player.dev_cards_in_hand.get(DevelopmentCardType.ROAD_BUILDING, 0) == 0:
             return False
@@ -889,6 +913,10 @@ class GameState:
         """
         player = self.players[player_id]
 
+        # Vérifier qu'une carte développement n'a pas déjà été jouée ce tour
+        if player.dev_card_played_this_turn:
+            return False
+
         # Vérifier que le joueur a la carte
         if player.dev_cards_in_hand.get(DevelopmentCardType.YEAR_OF_PLENTY, 0) == 0:
             return False
@@ -918,6 +946,10 @@ class GameState:
             Le nombre de ressources volées, ou -1 si la carte ne peut pas être jouée
         """
         player = self.players[player_id]
+
+        # Vérifier qu'une carte développement n'a pas déjà été jouée ce tour
+        if player.dev_card_played_this_turn:
+            return -1
 
         # Vérifier que le joueur a la carte
         if player.dev_cards_in_hand.get(DevelopmentCardType.MONOPOLY, 0) == 0:

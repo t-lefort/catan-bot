@@ -108,32 +108,51 @@ class PlayerState:
         Calcule la longueur de la plus longue route.
 
         Algorithme de parcours en profondeur pour trouver le plus long chemin.
+        Suit les arêtes (edges) plutôt que les sommets pour gérer correctement les boucles.
         """
         if not self.roads:
             return 0
 
-        # Construire un graphe d'adjacence des routes
-        graph: dict[VertexCoord, list[VertexCoord]] = {}
+        # Créer une clé unique pour chaque arête basée sur ses sommets
+        def edge_key(e: EdgeCoord) -> tuple:
+            v1, v2 = e.vertices()
+            # Créer des clés de sommets basées sur les hexagones adjacents
+            k1 = tuple(sorted([(h.q, h.r) for h in v1.adjacent_hexes()]))
+            k2 = tuple(sorted([(h.q, h.r) for h in v2.adjacent_hexes()]))
+            # Normaliser l'arête (ordre des sommets n'importe pas)
+            return tuple(sorted([k1, k2]))
+
+        def vertex_key(v: VertexCoord) -> tuple:
+            """Crée une clé unique pour un sommet physique basée sur ses hexagones adjacents."""
+            return tuple(sorted([(h.q, h.r) for h in v.adjacent_hexes()]))
+
+        # Construire un graphe: vertex -> list of (neighbor_vertex, edge_key)
+        graph: dict[tuple, list[tuple[tuple, tuple]]] = {}
+
         for edge in self.roads:
             v1, v2 = edge.vertices()
-            graph.setdefault(v1, []).append(v2)
-            graph.setdefault(v2, []).append(v1)
+            k1, k2 = vertex_key(v1), vertex_key(v2)
+            ek = edge_key(edge)
+
+            graph.setdefault(k1, []).append((k2, ek))
+            graph.setdefault(k2, []).append((k1, ek))
 
         # DFS depuis chaque sommet pour trouver le plus long chemin
+        # En suivant les arêtes (pas les sommets)
         max_length = 0
 
-        def dfs(vertex: VertexCoord, visited: set[VertexCoord], length: int) -> int:
+        def dfs(current_vertex: tuple, visited_edges: set[tuple], length: int) -> int:
             max_len = length
-            for neighbor in graph.get(vertex, []):
-                if neighbor not in visited:
-                    visited.add(neighbor)
-                    max_len = max(max_len, dfs(neighbor, visited, length + 1))
-                    visited.remove(neighbor)
+            for neighbor, edge_k in graph.get(current_vertex, []):
+                if edge_k not in visited_edges:
+                    visited_edges.add(edge_k)
+                    max_len = max(max_len, dfs(neighbor, visited_edges, length + 1))
+                    visited_edges.remove(edge_k)
             return max_len
 
         for start_vertex in graph:
-            visited = {start_vertex}
-            length = dfs(start_vertex, visited, 0)
+            visited_edges: set[tuple] = set()
+            length = dfs(start_vertex, visited_edges, 0)
             max_length = max(max_length, length)
 
         return max_length

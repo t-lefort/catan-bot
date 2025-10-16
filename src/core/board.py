@@ -17,12 +17,15 @@ class HexCoord:
     q: int
     r: int
 
+    def __post_init__(self) -> None:
+        """Valide les coordonnées cubiques."""
+        # Store s for efficiency
+        object.__setattr__(self, '_s', -self.q - self.r)
+
     @property
     def s(self) -> int:
+        """Calcule s à partir de q et r (s = -q - r pour satisfaire q+r+s=0)."""
         return -self.q - self.r
-
-    def __post_init__(self) -> None:
-        assert self.q + self.r + self.s == 0, "Invalid cube coordinates"
 
     def neighbors(self) -> list['HexCoord']:
         """Retourne les 6 hexagones voisins."""
@@ -36,11 +39,14 @@ class HexCoord:
         ]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=True)
 class VertexCoord:
     """
     Coordonnées d'un sommet (intersection de 3 hexagones).
     Défini par un hexagone et une direction (0-5).
+
+    Note: Le même sommet physique peut être représenté par différentes paires (hex, direction).
+    Pour comparer correctement les sommets, utilisez la méthode is_same_vertex().
     """
     hex: HexCoord
     direction: int  # 0-5, dans le sens horaire à partir du haut
@@ -55,7 +61,11 @@ class VertexCoord:
         return [
             VertexCoord(self.hex, (self.direction - 1) % 6),
             VertexCoord(self.hex, (self.direction + 1) % 6),
-            VertexCoord(neighbors[self.direction], (self.direction + 2) % 6),
+            # Le troisième sommet adjacent se trouve sur l'hexagone voisin
+            # dans la direction actuelle. Sa direction locale doit pointer
+            # vers le sommet partagé par l'hex courant (d) et le voisin (d-1).
+            # Cela correspond à (direction + 4) % 6, et non (direction + 2).
+            VertexCoord(neighbors[self.direction], (self.direction + 4) % 6),
         ]
 
     def adjacent_hexes(self) -> list[HexCoord]:
@@ -67,12 +77,26 @@ class VertexCoord:
             neighbors[(self.direction - 1) % 6],
         ]
 
+    def is_same_vertex(self, other: 'VertexCoord') -> bool:
+        """
+        Vérifie si deux VertexCoord représentent le même sommet physique.
+        Deux sommets sont identiques s'ils partagent les mêmes 3 hexagones adjacents.
+        """
+        # Comparer tous les 3 hexagones adjacents, y compris ceux hors plateau
+        # Ceci garantit que deux sommets physiquement différents ne sont pas confondus
+        self_hexes = set(self.adjacent_hexes())
+        other_hexes = set(other.adjacent_hexes())
+        return self_hexes == other_hexes
+
 
 @dataclass(frozen=True)
 class EdgeCoord:
     """
     Coordonnées d'une arête (entre 2 hexagones).
     Défini par un hexagone et une direction (0-5).
+
+    Note: La même arête physique peut être représentée par différentes paires (hex, direction).
+    Pour comparer correctement les arêtes, utilisez la méthode is_same_edge().
     """
     hex: HexCoord
     direction: int  # 0-5
@@ -96,6 +120,16 @@ class EdgeCoord:
             VertexCoord(self.hex, self.direction),
             VertexCoord(self.hex, (self.direction + 1) % 6),
         )
+
+    def is_same_edge(self, other: 'EdgeCoord') -> bool:
+        """
+        Vérifie si deux EdgeCoord représentent la même arête physique.
+        Deux arêtes sont identiques si elles partagent les mêmes 2 sommets.
+        """
+        v1_self, v2_self = self.vertices()
+        v1_other, v2_other = other.vertices()
+        return (v1_self.is_same_vertex(v1_other) and v2_self.is_same_vertex(v2_other)) or \
+               (v1_self.is_same_vertex(v2_other) and v2_self.is_same_vertex(v1_other))
 
 
 @dataclass
@@ -147,6 +181,17 @@ class Board:
                 if all(h in self.hexes for h in adjacent):
                     vertices.add(vertex)
         return vertices
+
+    def is_valid_vertex(self, vertex: VertexCoord) -> bool:
+        """Vérifie si un sommet est valide (tous ses hexagones adjacents existent)."""
+        return all(h in self.hexes for h in vertex.adjacent_hexes())
+
+    def contains_vertex(self, vertex: VertexCoord) -> bool:
+        """Vérifie si un sommet est dans le set des sommets valides du plateau (avec comparaison physique)."""
+        for v in self.vertices:
+            if vertex.is_same_vertex(v):
+                return True
+        return False
 
     def _compute_valid_edges(self) -> set[EdgeCoord]:
         """Calcule toutes les arêtes valides du plateau."""
