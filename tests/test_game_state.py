@@ -68,6 +68,37 @@ class TestResourceProduction:
         # Vérifier que le joueur a reçu des ressources
         assert game.players[0].total_resources() > sum(initial_resources)
 
+    def test_resource_production_with_different_vertex_representation(self):
+        """Test that resource distribution works even with different vertex representations."""
+        game = GameState.create_new_game(num_players=2)
+
+        # Trouver un hexagone avec un numéro qui a des voisins
+        hex_coord = None
+        hex_number = None
+        for coord, hex in game.board.hexes.items():
+            if hex.number is not None and hex.number != 7:
+                # Vérifier que ce hex a au moins un voisin sur le plateau
+                neighbors = coord.neighbors()
+                if any(n in game.board.hexes for n in neighbors):
+                    hex_coord = coord
+                    hex_number = hex.number
+                    break
+
+        assert hex_coord is not None
+
+        # Placer une colonie avec une représentation du vertex
+        vertex1 = VertexCoord(hex_coord, 0)
+        game.settlements_on_board[vertex1] = 0
+        game.players[0].settlements.add(vertex1)
+
+        # Distribuer les ressources - cette méthode créera une AUTRE représentation
+        # du même vertex physique (via VertexCoord(hex.coord, direction))
+        initial_resources = game.players[0].total_resources()
+        game.distribute_resources(hex_number)
+
+        # Le joueur devrait avoir reçu 1 ressource même si les représentations diffèrent
+        assert game.players[0].total_resources() == initial_resources + 1
+
     def test_no_resources_on_seven(self):
         """Test that rolling a 7 doesn't distribute resources."""
         game = GameState.create_new_game(num_players=2)

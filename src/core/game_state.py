@@ -8,10 +8,11 @@ Conçu pour être:
 - Rapide à copier (copy-on-write pour les structures volumineuses)
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Optional
-from enum import IntEnum, auto
-import numpy as np
+from typing import Optional, TYPE_CHECKING
+from enum import IntEnum
 import random
 from copy import deepcopy
 
@@ -23,8 +24,6 @@ from .constants import (
     BUILDING_COSTS,
     BuildingType,
     DEV_CARD_COST,
-    LONGEST_ROAD_VP,
-    LARGEST_ARMY_VP,
     MIN_ROAD_LENGTH_FOR_BONUS,
     MIN_ARMY_SIZE_FOR_BONUS,
     MAX_HAND_SIZE_BEFORE_DISCARD,
@@ -33,6 +32,10 @@ from .constants import (
     PORT_SPECIFIC_RATIO,
     DEV_CARD_DISTRIBUTION,
 )
+
+if TYPE_CHECKING:
+    from .actions import Action
+    from .constants import PortType
 
 
 class GamePhase(IntEnum):
@@ -76,6 +79,10 @@ class GameState:
     game_phase: GamePhase = GamePhase.SETUP
     turn_phase: TurnPhase = TurnPhase.ROLL_DICE
 
+    # État de la phase de setup
+    setup_settlements_placed: int = 0  # Nombre total de colonies placées en setup
+    setup_roads_placed: int = 0        # Nombre total de routes placées en setup
+
     # Cartes développement restantes
     dev_card_deck: list[DevelopmentCardType] = field(default_factory=list)
 
@@ -85,7 +92,7 @@ class GameState:
     roads_on_board: dict[EdgeCoord, int] = field(default_factory=dict)
 
     # Ports (vertex -> type de port)
-    ports: dict[VertexCoord, 'PortType'] = field(default_factory=dict)
+    ports: dict[VertexCoord, PortType] = field(default_factory=dict)
 
     # Compteurs de tours
     turn_number: int = 0
@@ -170,10 +177,11 @@ class GameState:
         Règles:
         - Doit y avoir une colonie du joueur
         """
-        return (
-            vertex in self.settlements_on_board
-            and self.settlements_on_board[vertex] == player_id
-        )
+        # Chercher si ce vertex (physique) a une colonie du joueur
+        for settlement_vertex, owner_id in self.settlements_on_board.items():
+            if vertex.is_same_vertex(settlement_vertex) and owner_id == player_id:
+                return True
+        return False
 
     def can_place_road(self, edge: EdgeCoord, player_id: int) -> bool:
         """
@@ -183,25 +191,30 @@ class GameState:
         - L'arête ne doit pas avoir de route
         - Doit être adjacent à une construction ou route du joueur
         """
-        # Vérifier qu'il n'y a pas déjà une route
-        if edge in self.roads_on_board:
-            return False
+        # Vérifier qu'il n'y a pas déjà une route (utiliser is_same_edge pour comparaison physique)
+        for existing_edge in self.roads_on_board:
+            if edge.is_same_edge(existing_edge):
+                return False
 
         player = self.players[player_id]
 
         # Vérifier qu'une extrémité est connectée à une route ou construction du joueur
         v1, v2 = edge.vertices()
 
-        # Vérifier les constructions du joueur
-        if v1 in player.settlements or v1 in player.cities:
-            return True
-        if v2 in player.settlements or v2 in player.cities:
-            return True
+        # Vérifier les constructions du joueur (utiliser is_same_vertex)
+        for settlement_vertex in player.settlements:
+            if v1.is_same_vertex(settlement_vertex) or v2.is_same_vertex(settlement_vertex):
+                return True
+        for city_vertex in player.cities:
+            if v1.is_same_vertex(city_vertex) or v2.is_same_vertex(city_vertex):
+                return True
 
         # Vérifier les routes adjacentes
         for adj_edge in edge.adjacent_edges():
-            if adj_edge in player.roads:
-                return True
+            # Vérifier que l'arête adjacente existe sur le plateau et appartient au joueur
+            for road_edge, owner_id in self.roads_on_board.items():
+                if adj_edge.is_same_edge(road_edge) and owner_id == player_id:
+                    return True
 
         return False
 
@@ -222,7 +235,7 @@ class GameState:
 
         return edges
 
-    def get_valid_actions(self) -> list['Action']:
+    def get_valid_actions(self) -> list[Action]:
         """
         Retourne toutes les actions valides pour le joueur actuel.
 
@@ -244,8 +257,33 @@ class GameState:
             EndTurnAction,
         )
 
-        actions = []
+        actions: list[Action] = []
         player = self.current_player
+
+        # Phase de SETUP
+        if self.game_phase == GamePhase.SETUP:
+            # Déterminer si on place une colonie ou une route
+            if self.setup_settlements_placed == self.setup_roads_placed:
+                # On doit placer une colonie
+                for vertex in self.board.vertices:
+                    if self.can_place_settlement(vertex, self.current_player_idx):
+                        actions.append(BuildSettlementAction(vertex))
+            else:
+                # On doit placer une route adjacente à la dernière colonie placée
+                # Trouver la dernière colonie placée par ce joueur
+                last_settlement = None
+                for vertex in player.settlements:
+                    last_settlement = vertex
+                    break  # La dernière ajoutée (en Python 3.7+, sets gardent l'ordre d'insertion)
+
+                if last_settlement:
+                    # Générer les routes adjacentes à cette colonie
+                    for adj_vertex in last_settlement.adjacent_vertices():
+                        edges = self._edges_between(last_settlement, adj_vertex)
+                        for edge in edges:
+                            if self.can_place_road(edge, self.current_player_idx):
+                                actions.append(BuildRoadAction(edge))
+            return actions
 
         # Phase de lancer de dés
         if self.turn_phase == TurnPhase.ROLL_DICE:
@@ -374,7 +412,7 @@ class GameState:
 
         return actions
 
-    def apply_action(self, action: 'Action') -> 'GameState':
+    def apply_action(self, action: Action) -> 'GameState':
         """
         Applique une action et retourne le nouvel état.
 
@@ -420,13 +458,45 @@ class GameState:
                 new_state.turn_phase = TurnPhase.MAIN
 
         elif isinstance(action, BuildSettlementAction):
-            new_state.build_settlement(new_state.current_player_idx, action.vertex)
+            success = new_state.build_settlement(new_state.current_player_idx, action.vertex)
+            # En phase SETUP, gérer la logique spéciale
+            if success and new_state.game_phase == GamePhase.SETUP:
+                new_state.setup_settlements_placed += 1
+                # Si c'est le 2ème round (après num_players placements), donner les ressources
+                if new_state.setup_settlements_placed > new_state.num_players:
+                    for hex_coord in action.vertex.adjacent_hexes():
+                        if hex_coord in new_state.board.hexes:
+                            hex_tile = new_state.board.hexes[hex_coord]
+                            resource = hex_tile.produces_resource()
+                            if resource is not None:
+                                new_state.current_player.resources[resource] += 1
 
         elif isinstance(action, BuildCityAction):
             new_state.build_city(new_state.current_player_idx, action.vertex)
 
         elif isinstance(action, BuildRoadAction):
-            new_state.build_road(new_state.current_player_idx, action.edge)
+            success = new_state.build_road(new_state.current_player_idx, action.edge)
+            # En phase SETUP, gérer la transition de joueur
+            if success and new_state.game_phase == GamePhase.SETUP:
+                new_state.setup_roads_placed += 1
+
+                # Vérifier si on termine la phase de setup
+                if new_state.setup_roads_placed >= new_state.num_players * 2:
+                    new_state.game_phase = GamePhase.MAIN_GAME
+                    new_state.turn_phase = TurnPhase.ROLL_DICE
+                else:
+                    # Passer au joueur suivant
+                    # Premier round (rounds 0 à num_players-1): ordre normal
+                    # Deuxième round (rounds num_players à 2*num_players-1): ordre inversé
+                    if new_state.setup_roads_placed < new_state.num_players:
+                        # Premier round: ordre croissant
+                        new_state.next_player()
+                    elif new_state.setup_roads_placed == new_state.num_players:
+                        # Transition: le dernier joueur du round 1 joue à nouveau
+                        pass  # Ne rien faire, même joueur
+                    else:
+                        # Deuxième round: ordre décroissant
+                        new_state.current_player_idx = (new_state.current_player_idx - 1) % new_state.num_players
 
         elif isinstance(action, BuyDevCardAction):
             new_state.buy_dev_card(new_state.current_player_idx)
@@ -521,15 +591,17 @@ class GameState:
             for direction in range(6):
                 vertex = VertexCoord(hex.coord, direction)
 
-                # Vérifier s'il y a une colonie
-                if vertex in self.settlements_on_board:
-                    player_id = self.settlements_on_board[vertex]
-                    self.players[player_id].resources[resource] += 1
+                # Vérifier s'il y a une colonie (en utilisant is_same_vertex pour comparaison physique)
+                for settlement_vertex, player_id in self.settlements_on_board.items():
+                    if vertex.is_same_vertex(settlement_vertex):
+                        self.players[player_id].resources[resource] += 1
+                        break
 
                 # Vérifier s'il y a une ville (2 ressources)
-                elif vertex in self.cities_on_board:
-                    player_id = self.cities_on_board[vertex]
-                    self.players[player_id].resources[resource] += 2
+                for city_vertex, player_id in self.cities_on_board.items():
+                    if vertex.is_same_vertex(city_vertex):
+                        self.players[player_id].resources[resource] += 2
+                        break
 
     def move_robber(self, new_hex: HexCoord) -> None:
         """Déplace le voleur sur un nouveau hexagone."""
@@ -559,6 +631,72 @@ class GameState:
                     players.add(player_id)
 
         return players
+
+    def has_valid_placements(self, player_id: int, building_type: str) -> bool:
+        """
+        Vérifie s'il existe au moins un emplacement valide pour un type de construction.
+
+        Args:
+            player_id: ID du joueur
+            building_type: "settlement", "road", ou "city"
+
+        Returns:
+            True s'il existe au moins un emplacement valide
+        """
+        player = self.players[player_id]
+
+        if building_type == "settlement":
+            # En phase de setup, vérifier tous les vertices
+            if self.game_phase == GamePhase.SETUP:
+                for vertex in self.board.vertices:
+                    if self.can_place_settlement(vertex, player_id):
+                        return True
+                return False
+
+            # En phase principale, vérifier les vertices près des routes
+            for road in player.roads:
+                v1, v2 = road.vertices()
+                if self.can_place_settlement(v1, player_id):
+                    return True
+                if self.can_place_settlement(v2, player_id):
+                    return True
+            return False
+
+        elif building_type == "road":
+            # En phase de setup, vérifier seulement les routes adjacentes à la dernière colonie
+            if self.game_phase == GamePhase.SETUP:
+                last_settlement = None
+                for vertex in player.settlements:
+                    last_settlement = vertex
+                    break
+                if last_settlement:
+                    for adj_vertex in last_settlement.adjacent_vertices():
+                        edges = self._edges_between(last_settlement, adj_vertex)
+                        for edge in edges:
+                            if self.can_place_road(edge, player_id):
+                                return True
+                return False
+
+            # En phase principale, vérifier les routes adjacentes aux routes existantes
+            for road in player.roads:
+                for adj_edge in road.adjacent_edges():
+                    if self.can_place_road(adj_edge, player_id):
+                        return True
+
+            # Vérifier les routes adjacentes aux colonies/villes
+            for settlement in player.settlements.union(player.cities):
+                for adj_vertex in settlement.adjacent_vertices():
+                    edges = self._edges_between(settlement, adj_vertex)
+                    for edge in edges:
+                        if self.can_place_road(edge, player_id):
+                            return True
+            return False
+
+        elif building_type == "city":
+            # Il suffit d'avoir au moins une colonie
+            return len(player.settlements) > 0
+
+        return False
 
     def steal_resource_from_player(self, victim_id: int, thief_id: int) -> Optional[ResourceType]:
         """
@@ -671,12 +809,27 @@ class GameState:
 
         player.pay(BUILDING_COSTS[BuildingType.CITY])
 
-        # Améliorer la colonie en ville
-        del self.settlements_on_board[vertex]
-        self.cities_on_board[vertex] = player_id
+        # Améliorer la colonie en ville - trouver le vertex exact dans settlements_on_board
+        vertex_to_remove = None
+        for settlement_vertex, owner_id in self.settlements_on_board.items():
+            if vertex.is_same_vertex(settlement_vertex) and owner_id == player_id:
+                vertex_to_remove = settlement_vertex
+                break
 
-        player.settlements.remove(vertex)
-        player.cities.add(vertex)
+        if vertex_to_remove:
+            del self.settlements_on_board[vertex_to_remove]
+            self.cities_on_board[vertex] = player_id
+
+            # Trouver et retirer le vertex dans player.settlements
+            player_vertex_to_remove = None
+            for settlement_vertex in player.settlements:
+                if vertex.is_same_vertex(settlement_vertex):
+                    player_vertex_to_remove = settlement_vertex
+                    break
+            if player_vertex_to_remove:
+                player.settlements.remove(player_vertex_to_remove)
+
+            player.cities.add(vertex)
 
         return True
 
@@ -734,17 +887,18 @@ class GameState:
 
         return card
 
-    def get_player_ports(self, player_id: int) -> set['PortType']:
+    def get_player_ports(self, player_id: int) -> set[PortType]:
         """Retourne les types de ports accessibles à un joueur."""
-        from .constants import PortType
-
         player = self.players[player_id]
-        accessible_ports = set()
+        accessible_ports: set[PortType] = set()
 
         # Vérifier toutes les colonies et villes du joueur
         for vertex in player.settlements.union(player.cities):
-            if vertex in self.ports:
-                accessible_ports.add(self.ports[vertex])
+            # Comparaison physique des sommets, car VertexCoord peut avoir
+            # plusieurs représentations pour le même sommet.
+            for port_vertex, port_type in self.ports.items():
+                if vertex.is_same_vertex(port_vertex):
+                    accessible_ports.add(port_type)
 
         return accessible_ports
 

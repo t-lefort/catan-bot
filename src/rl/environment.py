@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
+from gymnasium.core import RenderFrame
+from typing import cast
 
 from ..core.game_state import GameState
 from ..core.actions import Action
@@ -124,7 +126,7 @@ class CatanEnv(gym.Env):
 
         return observation, reward, terminated, truncated, info
 
-    def _get_observation(self) -> Dict[str, np.ndarray]:
+    def _get_observation(self) -> Dict[str, Any]:
         """Construit l'observation à partir du game state."""
         assert self.game_state is not None
 
@@ -186,14 +188,14 @@ class CatanEnv(gym.Env):
         # TODO: Reward shaping (optionnel)
         return 0.0
 
-    def render(self) -> Optional[np.ndarray]:
+    def render(self) -> Optional[RenderFrame] | list[RenderFrame] | None:
         """Affiche l'état du jeu."""
         if self.render_mode == "human":
             # TODO: Affichage texte
             print(f"Game state: {self.game_state}")
         elif self.render_mode == "rgb_array":
             # TODO: Rendu graphique
-            return np.zeros((600, 800, 3), dtype=np.uint8)
+            return cast(RenderFrame, np.zeros((600, 800, 3), dtype=np.uint8))
         return None
 
     def close(self) -> None:

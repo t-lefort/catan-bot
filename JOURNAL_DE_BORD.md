@@ -20,3 +20,8 @@ En lui demandant si les test sont bien exhaustifs, il se rend compte de lui mêm
 Il en crée une centaine de nouveaux.
 Quand j'execute les tests, il y en a 6 qui échouent. Je lui fais corriger et il semble bien trouver des bugs dans le code, l'analyse qu'il fait à postériori grâce aux tests semble bon, ce qui indique que les tests l'aide à créer du code de meilleur qualité.
 Il reste tout de même 3 tests qui ne passent toujours pas donc je lui redonne le resultat des tests.
+J'ai du itérer plusieurs fois pour qu'il y ait moins de tests qui fail. Au bout d'un moment j'ai arreté d'essayer de comprendre tout ce qu'il faisait.
+Et je passe sur gpt-5-high pour regler le dernier bug qui persiste après plusieurs itérations avec Claude Code. 
+ChatGPT semble avoir trouvé le problème tout de suite, je n'ai pas l'impression qu'il a contourné le test, il a juste corrigé une formule mathématique qui devait être une erreur de résonnement de Claude.
+
+

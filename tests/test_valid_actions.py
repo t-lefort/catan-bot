@@ -61,8 +61,16 @@ class TestGetValidActionsRobberPhase:
         game.game_phase = GamePhase.MAIN_GAME
         game.turn_phase = TurnPhase.ROBBER
 
-        # Placer une colonie du joueur 1 sur un hexagone
-        hex_coord = list(game.board.hexes.keys())[0]
+        # Trouver un hexagone qui n'a PAS le voleur
+        hex_coord = None
+        for coord, hex_tile in game.board.hexes.items():
+            if not hex_tile.has_robber:
+                hex_coord = coord
+                break
+
+        assert hex_coord is not None, "Should have at least one hex without robber"
+
+        # Placer une colonie du joueur 1 sur cet hexagone
         vertex = VertexCoord(hex_coord, 0)
         game.settlements_on_board[vertex] = 1
         game.players[1].settlements.add(vertex)
