@@ -102,3 +102,13 @@ MAX_ROADS_PER_PLAYER = 15
 BANK_TRADE_RATIO = 4  # 4:1 par défaut
 PORT_GENERIC_RATIO = 3  # 3:1 port générique
 PORT_SPECIFIC_RATIO = 2  # 2:1 port spécialisé
+
+
+class PortType(IntEnum):
+    """Types de ports."""
+    GENERIC = 0  # 3:1 n'importe quelle ressource
+    WOOD = 1     # 2:1 bois
+    BRICK = 2    # 2:1 argile
+    SHEEP = 3    # 2:1 mouton
+    WHEAT = 4    # 2:1 blé
+    ORE = 5      # 2:1 minerai

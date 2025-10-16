@@ -2,6 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Working Guidelines
+
+**IMPORTANT: Command Execution Policy**
+
+- **DO NOT** run Python commands directly using the Bash tool
+- **INSTEAD**: Suggest the command to run and ask the user to execute it
+- Wait for the user to report the results they observe
+- This applies to all Python commands including:
+  - Running the application (`python -m src.gui.game_window`)
+  - Running tests (`pytest`)
+  - Type checking (`mypy`)
+  - Training scripts (`python -m src.rl.train`)
+  - Any other Python execution
+
+**Example workflow:**
+1. You suggest: "Please run `pytest tests/test_board.py` and let me know what output you see"
+2. User runs the command and reports results
+3. You analyze the results and provide guidance
+
 ## Project Overview
 
 CatanBot is a superhuman Catan (Settlers of Catan) AI using reinforcement learning. The goal is to create a bot capable of beating top human players in both 1v1 (15 points) and 4-player (10 points) modes, with potential integration with Colonist.IO for competitive play.

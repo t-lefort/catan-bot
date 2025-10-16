@@ -1,7 +1,6 @@
 """Player state representation."""
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Set
 import numpy as np
 
 from .constants import (
@@ -33,14 +32,15 @@ class PlayerState:
     resources: np.ndarray = field(default_factory=lambda: np.zeros(NUM_RESOURCES, dtype=np.int32))
 
     # Cartes développement
-    dev_cards_in_hand: Dict[DevelopmentCardType, int] = field(default_factory=dict)
-    dev_cards_played: Dict[DevelopmentCardType, int] = field(default_factory=dict)
-    dev_cards_bought_this_turn: List[DevelopmentCardType] = field(default_factory=list)
+    dev_cards_in_hand: dict[DevelopmentCardType, int] = field(default_factory=dict)
+    dev_cards_played: dict[DevelopmentCardType, int] = field(default_factory=dict)
+    dev_cards_bought_this_turn: list[DevelopmentCardType] = field(default_factory=list)
+    dev_card_played_this_turn: bool = False  # Une seule carte développement par tour
 
     # Constructions sur le plateau
-    settlements: Set[VertexCoord] = field(default_factory=set)
-    cities: Set[VertexCoord] = field(default_factory=set)
-    roads: Set[EdgeCoord] = field(default_factory=set)
+    settlements: set[VertexCoord] = field(default_factory=set)
+    cities: set[VertexCoord] = field(default_factory=set)
+    roads: set[EdgeCoord] = field(default_factory=set)
 
     # Chevaliers joués (pour l'armée la plus grande)
     knights_played: int = 0
@@ -53,20 +53,20 @@ class PlayerState:
         """Retourne le nombre total de ressources."""
         return int(np.sum(self.resources))
 
-    def can_afford(self, cost: Dict[ResourceType, int]) -> bool:
+    def can_afford(self, cost: dict[ResourceType, int]) -> bool:
         """Vérifie si le joueur peut payer un coût."""
         for resource, amount in cost.items():
             if self.resources[resource] < amount:
                 return False
         return True
 
-    def pay(self, cost: Dict[ResourceType, int]) -> None:
+    def pay(self, cost: dict[ResourceType, int]) -> None:
         """Paie un coût en ressources."""
         for resource, amount in cost.items():
             self.resources[resource] -= amount
             assert self.resources[resource] >= 0, f"Negative resources for {resource}"
 
-    def receive(self, resources: Dict[ResourceType, int]) -> None:
+    def receive(self, resources: dict[ResourceType, int]) -> None:
         """Reçoit des ressources."""
         for resource, amount in resources.items():
             self.resources[resource] += amount
@@ -113,7 +113,7 @@ class PlayerState:
             return 0
 
         # Construire un graphe d'adjacence des routes
-        graph: Dict[VertexCoord, List[VertexCoord]] = {}
+        graph: dict[VertexCoord, list[VertexCoord]] = {}
         for edge in self.roads:
             v1, v2 = edge.vertices()
             graph.setdefault(v1, []).append(v2)
@@ -122,7 +122,7 @@ class PlayerState:
         # DFS depuis chaque sommet pour trouver le plus long chemin
         max_length = 0
 
-        def dfs(vertex: VertexCoord, visited: Set[VertexCoord], length: int) -> int:
+        def dfs(vertex: VertexCoord, visited: set[VertexCoord], length: int) -> int:
             max_len = length
             for neighbor in graph.get(vertex, []):
                 if neighbor not in visited:

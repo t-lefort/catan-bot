@@ -5,7 +5,7 @@ Utilise un système de coordonnées cubiques pour les hexagones.
 """
 
 from dataclasses import dataclass
-from typing import List, Set, Tuple, Dict, Optional
+from typing import Optional
 import numpy as np
 
 from .constants import TerrainType, ResourceType
@@ -24,7 +24,7 @@ class HexCoord:
     def __post_init__(self) -> None:
         assert self.q + self.r + self.s == 0, "Invalid cube coordinates"
 
-    def neighbors(self) -> List['HexCoord']:
+    def neighbors(self) -> list['HexCoord']:
         """Retourne les 6 hexagones voisins."""
         return [
             HexCoord(self.q + 1, self.r - 1),  # NE
@@ -48,7 +48,7 @@ class VertexCoord:
     def __post_init__(self) -> None:
         assert 0 <= self.direction < 6, "Direction must be 0-5"
 
-    def adjacent_vertices(self) -> List['VertexCoord']:
+    def adjacent_vertices(self) -> list['VertexCoord']:
         """Retourne les 3 sommets adjacents."""
         # Chaque sommet est connecté à 3 autres sommets
         neighbors = self.hex.neighbors()
@@ -58,7 +58,7 @@ class VertexCoord:
             VertexCoord(neighbors[self.direction], (self.direction + 2) % 6),
         ]
 
-    def adjacent_hexes(self) -> List[HexCoord]:
+    def adjacent_hexes(self) -> list[HexCoord]:
         """Retourne les 3 hexagones touchant ce sommet."""
         neighbors = self.hex.neighbors()
         return [
@@ -80,7 +80,7 @@ class EdgeCoord:
     def __post_init__(self) -> None:
         assert 0 <= self.direction < 6, "Direction must be 0-5"
 
-    def adjacent_edges(self) -> List['EdgeCoord']:
+    def adjacent_edges(self) -> list['EdgeCoord']:
         """Retourne les 4 arêtes adjacentes."""
         neighbors = self.hex.neighbors()
         return [
@@ -90,7 +90,7 @@ class EdgeCoord:
             EdgeCoord(neighbors[self.direction], (self.direction + 4) % 6),
         ]
 
-    def vertices(self) -> Tuple[VertexCoord, VertexCoord]:
+    def vertices(self) -> tuple[VertexCoord, VertexCoord]:
         """Retourne les 2 sommets aux extrémités de cette arête."""
         return (
             VertexCoord(self.hex, self.direction),
@@ -123,20 +123,20 @@ class Board:
     - Calcul rapide des ressources produites
     """
 
-    def __init__(self, hexes: List[Hex]):
-        self.hexes: Dict[HexCoord, Hex] = {h.coord: h for h in hexes}
+    def __init__(self, hexes: list[Hex]):
+        self.hexes: dict[HexCoord, Hex] = {h.coord: h for h in hexes}
 
         # Pré-calculer tous les sommets et arêtes valides
-        self.vertices: Set[VertexCoord] = self._compute_valid_vertices()
-        self.edges: Set[EdgeCoord] = self._compute_valid_edges()
+        self.vertices: set[VertexCoord] = self._compute_valid_vertices()
+        self.edges: set[EdgeCoord] = self._compute_valid_edges()
 
         # Index inversé pour retrouver rapidement les hexagones par numéro
-        self.hexes_by_number: Dict[int, List[Hex]] = {}
+        self.hexes_by_number: dict[int, list[Hex]] = {}
         for hex in hexes:
             if hex.number is not None:
                 self.hexes_by_number.setdefault(hex.number, []).append(hex)
 
-    def _compute_valid_vertices(self) -> Set[VertexCoord]:
+    def _compute_valid_vertices(self) -> set[VertexCoord]:
         """Calcule tous les sommets valides du plateau."""
         vertices = set()
         for hex_coord in self.hexes:
@@ -148,7 +148,7 @@ class Board:
                     vertices.add(vertex)
         return vertices
 
-    def _compute_valid_edges(self) -> Set[EdgeCoord]:
+    def _compute_valid_edges(self) -> set[EdgeCoord]:
         """Calcule toutes les arêtes valides du plateau."""
         edges = set()
         for hex_coord in self.hexes:
@@ -160,7 +160,7 @@ class Board:
                     edges.add(edge)
         return edges
 
-    def get_hexes_for_roll(self, roll: int) -> List[Hex]:
+    def get_hexes_for_roll(self, roll: int) -> list[Hex]:
         """Retourne les hexagones qui produisent pour un jet de dé donné."""
         return [h for h in self.hexes_by_number.get(roll, []) if not h.has_robber]
 
