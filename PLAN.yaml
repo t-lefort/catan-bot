@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-17T22:10:00Z
+last_updated: 2025-10-17T20:32:43Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 57
-  pending: 54
+  pending: 53
   in_progress: 1
-  completed: 2
+  completed: 3
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -82,13 +82,15 @@ sections:
 
       - id: DOC-007
         title: Étude catanatron + mapping de réutilisation
-        status: pending
+        status: completed
         priority: P0
         dependencies: [DOC-001, DOC-002]
         acceptance_criteria:
           - "Analyse des modules clés (board, rules, actions) du repo bcollazo/catanatron"
           - "Décisions: réutiliser/adapter vs réécrire, avec justification"
           - "Compatibilité de licence et modalités d'intégration documentées"
+        notes: |
+          2025-10-17: Analyse complétée. Voir docs/catanatron-study.md (réf c986945c) pour le mapping détaillé et les implications licence GPL.
 
   - id: ENG
     title: Moteur de jeu
@@ -449,6 +451,10 @@ sections:
         dependencies: [ENG-001, ENG-005]
         acceptance_criteria:
           - "Couverture de base > 70% côté moteur"
+        notes: |
+          2025-10-17: Contrats initiaux validés (tests verts)
+          - catan.engine.rules: constantes VP_TO_WIN, DISCARD_THRESHOLD, COSTS
+          - catan.engine.board: Board.standard(), tile/vertex/edge counts
       - id: TEST-002
         title: Propriétés (Hypothesis) distribution et invariants
         status: pending
