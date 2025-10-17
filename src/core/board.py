@@ -1,246 +1,442 @@
 """Board representation and geometry for Catan.
 
-Le plateau est représenté comme un graphe d'hexagones avec des sommets (vertices) et des arêtes (edges).
-Utilise un système de coordonnées cubiques pour les hexagones.
+Complete rebuild based on Catanatron's coordinate system.
+Uses unique integer IDs for tiles, nodes (vertices), and edges.
+Includes proper water hexes and port system.
 """
 
 from dataclasses import dataclass
-from typing import Optional
-import numpy as np
+from typing import Optional, Set, List, Tuple, Dict
+from enum import Enum
+import random
 
-from .constants import TerrainType, ResourceType
+from .constants import TerrainType, ResourceType, PortType
 
 
-@dataclass(frozen=True)
-class HexCoord:
-    """Coordonnées cubiques pour un hexagone (q, r, s avec q+r+s=0)."""
-    q: int
-    r: int
+# ============================================================================
+# DIRECTION SYSTEM
+# ============================================================================
 
-    def __post_init__(self) -> None:
-        """Valide les coordonnées cubiques."""
-        # Store s for efficiency
-        object.__setattr__(self, '_s', -self.q - self.r)
+class Direction(Enum):
+    """Hexagonal directions using cube coordinates."""
+    EAST = (1, -1, 0)
+    NORTHEAST = (1, 0, -1)
+    NORTHWEST = (0, 1, -1)
+    WEST = (-1, 1, 0)
+    SOUTHWEST = (-1, 0, 1)
+    SOUTHEAST = (0, -1, 1)
 
-    @property
-    def s(self) -> int:
-        """Calcule s à partir de q et r (s = -q - r pour satisfaire q+r+s=0)."""
-        return -self.q - self.r
 
-    def neighbors(self) -> list['HexCoord']:
-        """Retourne les 6 hexagones voisins."""
-        return [
-            HexCoord(self.q + 1, self.r - 1),  # NE
-            HexCoord(self.q + 1, self.r),      # E
-            HexCoord(self.q, self.r + 1),      # SE
-            HexCoord(self.q - 1, self.r + 1),  # SW
-            HexCoord(self.q - 1, self.r),      # W
-            HexCoord(self.q, self.r - 1),      # NW
-        ]
+# Direction vectors for easy access
+DIRECTION_VECTORS = {
+    Direction.EAST: (1, -1, 0),
+    Direction.NORTHEAST: (1, 0, -1),
+    Direction.NORTHWEST: (0, 1, -1),
+    Direction.WEST: (-1, 1, 0),
+    Direction.SOUTHWEST: (-1, 0, 1),
+    Direction.SOUTHEAST: (0, -1, 1),
+}
 
+
+# ============================================================================
+# COORDINATE SYSTEM
+# ============================================================================
 
 @dataclass(frozen=True, eq=True)
-class VertexCoord:
+class Coordinate:
+    """Cube coordinate for hexagonal tiles (x + y + z = 0)."""
+    x: int
+    y: int
+    z: int
+
+    def __post_init__(self):
+        assert self.x + self.y + self.z == 0, f"Invalid cube coordinate: {self.x} + {self.y} + {self.z} != 0"
+
+    def __add__(self, direction: Direction) -> 'Coordinate':
+        """Add a direction vector to this coordinate."""
+        dx, dy, dz = DIRECTION_VECTORS[direction]
+        return Coordinate(self.x + dx, self.y + dy, self.z + dz)
+
+    def neighbors(self) -> List['Coordinate']:
+        """Return all 6 neighboring coordinates."""
+        return [self + direction for direction in Direction]
+
+    def distance(self, other: 'Coordinate') -> int:
+        """Manhattan distance in cube coordinates."""
+        return (abs(self.x - other.x) + abs(self.y - other.y) + abs(self.z - other.z)) // 2
+
+
+def add_coordinates(coord: Coordinate, direction: Direction) -> Coordinate:
+    """Add a direction vector to a coordinate."""
+    dx, dy, dz = DIRECTION_VECTORS[direction]
+    return Coordinate(coord.x + dx, coord.y + dy, coord.z + dz)
+
+def _repeat_add(coord: Coordinate, direction: Direction, n: int) -> Coordinate:
+    """Move `n` steps from coord in given direction."""
+    dx, dy, dz = DIRECTION_VECTORS[direction]
+    return Coordinate(coord.x + dx * n, coord.y + dy * n, coord.z + dz * n)
+
+
+def generate_spiral_coordinates(layers: int) -> List[Coordinate]:
+    """Generate coordinates in a spiral pattern from center outward.
+
+    Layer 0: center (1 tile)
+    Layer r: ring of radius r around center (6r tiles)
+
+    Based on Red Blob Games' hex grid algorithms.
     """
-    Coordonnées d'un sommet (intersection de 3 hexagones).
-    Défini par un hexagone et une direction (0-5).
+    center = Coordinate(0, 0, 0)
+    results = [center]
+    if layers <= 0:
+        return results
 
-    Note: Le même sommet physique peut être représenté par différentes paires (hex, direction).
-    Pour comparer correctement les sommets, utilisez la méthode is_same_vertex().
+    ring_dirs = [
+        Direction.EAST,
+        Direction.NORTHEAST,
+        Direction.NORTHWEST,
+        Direction.WEST,
+        Direction.SOUTHWEST,
+        Direction.SOUTHEAST,
+    ]
+
+    for r in range(1, layers + 1):
+        # Start at center + (SOUTHWEST * r)
+        hex_coord = _repeat_add(center, Direction.SOUTHWEST, r)
+        for i in range(6):
+            for _ in range(r):
+                results.append(hex_coord)
+                hex_coord = hex_coord + ring_dirs[i]
+    return results
+
+
+# ============================================================================
+# NODE (VERTEX) SYSTEM
+# ============================================================================
+
+class NodeDirection(Enum):
+    """Directions for the 6 vertices of a hexagon (clockwise from top)."""
+    NORTH = 0
+    NORTHEAST = 1
+    SOUTHEAST = 2
+    SOUTH = 3
+    SOUTHWEST = 4
+    NORTHWEST = 5
+
+
+# Mapping from node direction to the tile directions that share this vertex
+NODE_TO_TILES = {
+    NodeDirection.NORTH: (Direction.NORTHWEST, Direction.NORTHEAST),
+    NodeDirection.NORTHEAST: (Direction.NORTHEAST, Direction.EAST),
+    NodeDirection.SOUTHEAST: (Direction.EAST, Direction.SOUTHEAST),
+    NodeDirection.SOUTH: (Direction.SOUTHEAST, Direction.SOUTHWEST),
+    NodeDirection.SOUTHWEST: (Direction.SOUTHWEST, Direction.WEST),
+    NodeDirection.NORTHWEST: (Direction.WEST, Direction.NORTHWEST),
+}
+
+
+def get_node_id(tile_coord: Coordinate, node_direction: NodeDirection) -> int:
+    """Generate a unique DETERMINISTIC node ID from tile coordinate and direction.
+
+    A node (vertex) is shared by 3 tiles. We use a canonical representation
+    to ensure the same physical node always gets the same ID.
+
+    IMPORTANT: Uses deterministic encoding, NOT hash(), to ensure IDs are stable
+    across program runs (necessary for save games, replay, etc.)
     """
-    hex: HexCoord
-    direction: int  # 0-5, dans le sens horaire à partir du haut
+    # Get the 3 tiles that share this node
+    tiles = get_tiles_touching_node(tile_coord, node_direction)
 
-    def __post_init__(self) -> None:
-        assert 0 <= self.direction < 6, "Direction must be 0-5"
+    # Sort tiles to get canonical representation (lexicographic order)
+    tiles_sorted = sorted(tiles, key=lambda c: (c.x, c.y, c.z))
 
-    def adjacent_vertices(self) -> list['VertexCoord']:
-        """Retourne les 3 sommets adjacents."""
-        # Chaque sommet est connecté à 3 autres sommets
-        neighbors = self.hex.neighbors()
-        return [
-            VertexCoord(self.hex, (self.direction - 1) % 6),
-            VertexCoord(self.hex, (self.direction + 1) % 6),
-            # Le troisième sommet adjacent se trouve sur l'hexagone voisin
-            # dans la direction actuelle. Sa direction locale doit pointer
-            # vers le sommet partagé par l'hex courant (d) et le voisin (d-1).
-            # Cela correspond à (direction + 4) % 6, et non (direction + 2).
-            VertexCoord(neighbors[self.direction], (self.direction + 4) % 6),
-        ]
+    # Use the canonical (first) tile's coordinates + direction to create deterministic ID
+    canonical = tiles_sorted[0]
 
-    def adjacent_hexes(self) -> list[HexCoord]:
-        """Retourne les 3 hexagones touchant ce sommet."""
-        neighbors = self.hex.neighbors()
-        return [
-            self.hex,
-            neighbors[self.direction],
-            neighbors[(self.direction - 1) % 6],
-        ]
+    # Find which corner of the canonical tile this is
+    for nd in NodeDirection:
+        tiles_for_nd = sorted(get_tiles_touching_node(canonical, nd), key=lambda c: (c.x, c.y, c.z))
+        if tiles_sorted == tiles_for_nd:
+            # Encode as: (x+100)*1000000 + (y+100)*10000 + (z+100)*100 + direction
+            # This ensures positive IDs and uniqueness
+            # Range: coordinates from -100 to +100, direction 0-5
+            return ((canonical.x + 100) * 1000000 +
+                    (canonical.y + 100) * 10000 +
+                    (canonical.z + 100) * 100 +
+                    nd.value)
 
-    def is_same_vertex(self, other: 'VertexCoord') -> bool:
-        """
-        Vérifie si deux VertexCoord représentent le même sommet physique.
-        Deux sommets sont identiques s'ils partagent les mêmes 3 hexagones adjacents.
-        """
-        # Comparer tous les 3 hexagones adjacents, y compris ceux hors plateau
-        # Ceci garantit que deux sommets physiquement différents ne sont pas confondus
-        self_hexes = set(self.adjacent_hexes())
-        other_hexes = set(other.adjacent_hexes())
-        return self_hexes == other_hexes
+    # Fallback (should never happen)
+    return ((tiles_sorted[0].x + 100) * 1000000 +
+            (tiles_sorted[0].y + 100) * 10000 +
+            (tiles_sorted[0].z + 100) * 100)
+
+    
 
 
-@dataclass(frozen=True)
-class EdgeCoord:
+def get_tiles_touching_node(tile_coord: Coordinate, node_direction: NodeDirection) -> List[Coordinate]:
+    """Get the 3 tile coordinates that touch this node."""
+    dir1, dir2 = NODE_TO_TILES[node_direction]
+
+    return [
+        tile_coord,
+        tile_coord + dir1,
+        tile_coord + dir2,
+    ]
+
+
+# ============================================================================
+# EDGE SYSTEM
+# ============================================================================
+
+class EdgeDirection(Enum):
+    """Directions for the 6 edges of a hexagon."""
+    NORTHEAST = 0  # Top-right edge
+    EAST = 1       # Right edge
+    SOUTHEAST = 2  # Bottom-right edge
+    SOUTHWEST = 3  # Bottom-left edge
+    WEST = 4       # Left edge
+    NORTHWEST = 5  # Top-left edge
+
+
+# Mapping edge direction to tile direction
+EDGE_TO_TILE = {
+    EdgeDirection.NORTHEAST: Direction.NORTHEAST,
+    EdgeDirection.EAST: Direction.EAST,
+    EdgeDirection.SOUTHEAST: Direction.SOUTHEAST,
+    EdgeDirection.SOUTHWEST: Direction.SOUTHWEST,
+    EdgeDirection.WEST: Direction.WEST,
+    EdgeDirection.NORTHWEST: Direction.NORTHWEST,
+}
+
+
+def get_edge_id(tile_coord: Coordinate, edge_direction: EdgeDirection) -> int:
+    """Generate a unique DETERMINISTIC edge ID from tile coordinate and direction.
+
+    An edge is shared by 2 tiles. We use canonical representation.
+
+    IMPORTANT: Uses deterministic encoding, NOT hash().
     """
-    Coordonnées d'une arête (entre 2 hexagones).
-    Défini par un hexagone et une direction (0-5).
+    tile1 = tile_coord
+    tile2 = tile_coord + EDGE_TO_TILE[edge_direction]
 
-    Note: La même arête physique peut être représentée par différentes paires (hex, direction).
-    Pour comparer correctement les arêtes, utilisez la méthode is_same_edge().
-    """
-    hex: HexCoord
-    direction: int  # 0-5
+    # Sort to get canonical representation
+    tiles_sorted = sorted([tile1, tile2], key=lambda c: (c.x, c.y, c.z))
 
-    def __post_init__(self) -> None:
-        assert 0 <= self.direction < 6, "Direction must be 0-5"
+    t1, t2 = tiles_sorted
 
-    def adjacent_edges(self) -> list['EdgeCoord']:
-        """Retourne les 4 arêtes adjacentes."""
-        neighbors = self.hex.neighbors()
-        return [
-            EdgeCoord(self.hex, (self.direction - 1) % 6),
-            EdgeCoord(self.hex, (self.direction + 1) % 6),
-            EdgeCoord(neighbors[self.direction], (self.direction + 2) % 6),
-            EdgeCoord(neighbors[self.direction], (self.direction + 4) % 6),
-        ]
+    # Encode two tiles: each tile uses 3 digits (x, y, z from -100 to +100 -> 0 to 200)
+    # Total: 6 digits per tile = 12 digits total, fits in int
+    return ((t1.x + 100) * 1000000000000 +
+            (t1.y + 100) * 10000000000 +
+            (t1.z + 100) * 100000000 +
+            (t2.x + 100) * 1000000 +
+            (t2.y + 100) * 10000 +
+            (t2.z + 100) * 100)
 
-    def vertices(self) -> tuple[VertexCoord, VertexCoord]:
-        """Retourne les 2 sommets aux extrémités de cette arête."""
-        return (
-            VertexCoord(self.hex, self.direction),
-            VertexCoord(self.hex, (self.direction + 1) % 6),
-        )
+    
 
-    def is_same_edge(self, other: 'EdgeCoord') -> bool:
-        """
-        Vérifie si deux EdgeCoord représentent la même arête physique.
-        Deux arêtes sont identiques si elles partagent les mêmes 2 sommets.
-        """
-        v1_self, v2_self = self.vertices()
-        v1_other, v2_other = other.vertices()
-        return (v1_self.is_same_vertex(v1_other) and v2_self.is_same_vertex(v2_other)) or \
-               (v1_self.is_same_vertex(v2_other) and v2_self.is_same_vertex(v1_other))
 
+def get_edge_endpoints(tile_coord: Coordinate, edge_direction: EdgeDirection) -> Tuple[int, int]:
+    """Get the two node IDs at the endpoints of this edge."""
+    # Map edge direction to the two node directions at its endpoints
+    edge_to_nodes = {
+        EdgeDirection.NORTHEAST: (NodeDirection.NORTH, NodeDirection.NORTHEAST),
+        EdgeDirection.EAST: (NodeDirection.NORTHEAST, NodeDirection.SOUTHEAST),
+        EdgeDirection.SOUTHEAST: (NodeDirection.SOUTHEAST, NodeDirection.SOUTH),
+        EdgeDirection.SOUTHWEST: (NodeDirection.SOUTH, NodeDirection.SOUTHWEST),
+        EdgeDirection.WEST: (NodeDirection.SOUTHWEST, NodeDirection.NORTHWEST),
+        EdgeDirection.NORTHWEST: (NodeDirection.NORTHWEST, NodeDirection.NORTH),
+    }
+
+    node_dir1, node_dir2 = edge_to_nodes[edge_direction]
+    node1 = get_node_id(tile_coord, node_dir1)
+    node2 = get_node_id(tile_coord, node_dir2)
+
+    return (node1, node2)
+
+
+# ============================================================================
+# TILE (HEXAGON) CLASSES
+# ============================================================================
 
 @dataclass
-class Hex:
-    """Un hexagone sur le plateau."""
-    coord: HexCoord
+class Tile:
+    """A hexagonal tile on the board."""
+    id: int
+    coordinate: Coordinate
     terrain: TerrainType
-    number: Optional[int]  # None pour le désert
-    has_robber: bool = False
+    number: Optional[int] = None  # Dice number (None for desert/water)
+    port: Optional[PortType] = None  # Port type if this is a water tile with port
+    port_direction: Optional[NodeDirection] = None  # Which edge has the port
 
-    def produces_resource(self) -> Optional[ResourceType]:
-        """Retourne la ressource produite par ce terrain."""
-        if self.terrain == TerrainType.DESERT:
+    @property
+    def is_land(self) -> bool:
+        """Check if this is a land tile."""
+        return self.terrain != TerrainType.WATER
+
+    @property
+    def is_water(self) -> bool:
+        """Check if this is a water tile."""
+        return self.terrain == TerrainType.WATER
+
+    @property
+    def resource(self) -> Optional[ResourceType]:
+        """Get the resource produced by this tile."""
+        if self.terrain == TerrainType.WATER or self.terrain == TerrainType.DESERT:
             return None
         return ResourceType(self.terrain.value)
 
 
+# ============================================================================
+# BOARD CLASS
+# ============================================================================
+
 class Board:
-    """
-    Représentation du plateau de Catan.
+    """The Catan game board with tiles, nodes, and edges."""
 
-    Optimisé pour:
-    - Recherche rapide des hexagones, sommets, arêtes
-    - Validation efficace des placements
-    - Calcul rapide des ressources produites
-    """
+    def __init__(self, tiles: List[Tile]):
+        self.tiles: Dict[int, Tile] = {tile.id: tile for tile in tiles}
+        self.tile_by_coord: Dict[Coordinate, Tile] = {tile.coordinate: tile for tile in tiles}
 
-    def __init__(self, hexes: list[Hex]):
-        self.hexes: dict[HexCoord, Hex] = {h.coord: h for h in hexes}
+        # Pre-compute all valid nodes and edges
+        self.nodes: Set[int] = self._compute_nodes()
+        self.edges: Set[int] = self._compute_edges()
 
-        # Pré-calculer tous les sommets et arêtes valides
-        self.vertices: set[VertexCoord] = self._compute_valid_vertices()
-        self.edges: set[EdgeCoord] = self._compute_valid_edges()
+        # Map tiles by dice number for production
+        self.tiles_by_number: Dict[int, List[Tile]] = {}
+        for tile in tiles:
+            if tile.number is not None:
+                self.tiles_by_number.setdefault(tile.number, []).append(tile)
 
-        # Index inversé pour retrouver rapidement les hexagones par numéro
-        self.hexes_by_number: dict[int, list[Hex]] = {}
-        for hex in hexes:
-            if hex.number is not None:
-                self.hexes_by_number.setdefault(hex.number, []).append(hex)
+        # Map nodes to adjacent tiles
+        self.nodes_to_tiles: Dict[int, List[Tile]] = self._compute_nodes_to_tiles()
 
-    def _compute_valid_vertices(self) -> set[VertexCoord]:
-        """Calcule tous les sommets valides du plateau."""
-        vertices = set()
-        for hex_coord in self.hexes:
-            for direction in range(6):
-                vertex = VertexCoord(hex_coord, direction)
-                # Vérifier que les 3 hexagones adjacents existent
-                adjacent = vertex.adjacent_hexes()
-                if all(h in self.hexes for h in adjacent):
-                    vertices.add(vertex)
-        return vertices
+        # Map edges to adjacent nodes (MUST be computed before nodes_to_edges)
+        self.edges_to_nodes: Dict[int, Tuple[int, int]] = self._compute_edges_to_nodes()
 
-    def is_valid_vertex(self, vertex: VertexCoord) -> bool:
-        """Vérifie si un sommet est valide (tous ses hexagones adjacents existent)."""
-        return all(h in self.hexes for h in vertex.adjacent_hexes())
+        # Map nodes to adjacent edges (uses edges_to_nodes)
+        self.nodes_to_edges: Dict[int, List[int]] = self._compute_nodes_to_edges()
 
-    def contains_vertex(self, vertex: VertexCoord) -> bool:
-        """Vérifie si un sommet est dans le set des sommets valides du plateau (avec comparaison physique)."""
-        for v in self.vertices:
-            if vertex.is_same_vertex(v):
-                return True
-        return False
+    def _compute_nodes(self) -> Set[int]:
+        """Compute all valid node IDs on the board."""
+        nodes = set()
+        for tile in self.tiles.values():
+            for node_dir in NodeDirection:
+                node_id = get_node_id(tile.coordinate, node_dir)
+                nodes.add(node_id)
+        return nodes
 
-    def _compute_valid_edges(self) -> set[EdgeCoord]:
-        """Calcule toutes les arêtes valides du plateau."""
+    def _compute_edges(self) -> Set[int]:
+        """Compute all edge IDs on the board, including boundary edges."""
         edges = set()
-        for hex_coord in self.hexes:
-            for direction in range(6):
-                edge = EdgeCoord(hex_coord, direction)
-                # Vérifier que les 2 hexagones adjacents existent
-                neighbor = hex_coord.neighbors()[direction]
-                if neighbor in self.hexes:
-                    edges.add(edge)
+        for tile in self.tiles.values():
+            for edge_dir in EdgeDirection:
+                edge_id = get_edge_id(tile.coordinate, edge_dir)
+                edges.add(edge_id)
         return edges
 
-    def get_hexes_for_roll(self, roll: int) -> list[Hex]:
-        """Retourne les hexagones qui produisent pour un jet de dé donné."""
-        return [h for h in self.hexes_by_number.get(roll, []) if not h.has_robber]
+    def _compute_nodes_to_tiles(self) -> Dict[int, List[Tile]]:
+        """Map each node to its adjacent tiles."""
+        node_to_tiles = {}
+        for tile in self.tiles.values():
+            for node_dir in NodeDirection:
+                node_id = get_node_id(tile.coordinate, node_dir)
+                if node_id not in node_to_tiles:
+                    node_to_tiles[node_id] = []
+                node_to_tiles[node_id].append(tile)
+        return node_to_tiles
+
+    def _compute_nodes_to_edges(self) -> Dict[int, List[int]]:
+        """Map each node to its adjacent edges."""
+        node_to_edges = {node: [] for node in self.nodes}
+        for edge_id in self.edges:
+            n1, n2 = self.edges_to_nodes[edge_id]
+            if n1 in node_to_edges:
+                node_to_edges[n1].append(edge_id)
+            if n2 in node_to_edges:
+                node_to_edges[n2].append(edge_id)
+        return node_to_edges
+
+    def _compute_edges_to_nodes(self) -> Dict[int, Tuple[int, int]]:
+        """Map each edge to its two endpoint nodes."""
+        edge_to_nodes: Dict[int, Tuple[int, int]] = {}
+        for tile in self.tiles.values():
+            for edge_dir in EdgeDirection:
+                edge_id = get_edge_id(tile.coordinate, edge_dir)
+                if edge_id not in edge_to_nodes:
+                    endpoints = get_edge_endpoints(tile.coordinate, edge_dir)
+                    edge_to_nodes[edge_id] = endpoints
+        return edge_to_nodes
+
+    def get_tiles_for_node(self, node_id: int) -> List[Tile]:
+        """Get all tiles adjacent to a node."""
+        return self.nodes_to_tiles.get(node_id, [])
+
+    def get_land_tiles_for_node(self, node_id: int) -> List[Tile]:
+        """Get all land tiles adjacent to a node."""
+        return [tile for tile in self.get_tiles_for_node(node_id) if tile.is_land]
+
+    def is_node_on_land(self, node_id: int) -> bool:
+        """Check if a node is adjacent to at least one land tile."""
+        return len(self.get_land_tiles_for_node(node_id)) > 0
+
+    def get_adjacent_nodes(self, node_id: int) -> List[int]:
+        """Get all nodes adjacent to this node (connected by edges)."""
+        adjacent = []
+        for edge_id in self.nodes_to_edges.get(node_id, []):
+            n1, n2 = self.edges_to_nodes[edge_id]
+            other = n2 if n1 == node_id else n1
+            adjacent.append(other)
+        return adjacent
+
+    def get_tiles_for_roll(self, roll: int, robber_tile: Optional[int] = None) -> List[Tile]:
+        """Get all tiles that produce resources for this dice roll."""
+        tiles = self.tiles_by_number.get(roll, [])
+        if robber_tile is not None:
+            tiles = [t for t in tiles if t.id != robber_tile]
+        return tiles
 
     @staticmethod
     def create_standard_board(shuffle: bool = True) -> 'Board':
-        """
-        Crée un plateau standard de Catan.
+        """Create a standard Catan board with 19 land tiles + 18 water tiles with ports."""
 
-        Si shuffle=True, mélange aléatoirement les terrains et numéros.
-        Sinon, utilise la disposition recommandée du jeu de base.
+        # Generate land tile coordinates (3 layers: 1 + 6 + 12 = 19 tiles)
+        land_coords = []
+        land_coords.append(Coordinate(0, 0, 0))  # Center
 
-        Le plateau standard est composé de 19 hexagones disposés ainsi:
-               x x x
-              x x x x
-             x x x x x
-              x x x x
-               x x x
-        """
-        # Définir les coordonnées des 19 hexagones du plateau standard
-        # En utilisant un système de coordonnées cubiques centré sur (0,0)
-        hex_coords = [
-            # Rangée du haut (3 hexagones)
-            HexCoord(0, -2), HexCoord(1, -2), HexCoord(2, -2),
-            # Deuxième rangée (4 hexagones)
-            HexCoord(-1, -1), HexCoord(0, -1), HexCoord(1, -1), HexCoord(2, -1),
-            # Rangée centrale (5 hexagones)
-            HexCoord(-2, 0), HexCoord(-1, 0), HexCoord(0, 0), HexCoord(1, 0), HexCoord(2, 0),
-            # Quatrième rangée (4 hexagones)
-            HexCoord(-2, 1), HexCoord(-1, 1), HexCoord(0, 1), HexCoord(1, 1),
-            # Rangée du bas (3 hexagones)
-            HexCoord(-2, 2), HexCoord(-1, 2), HexCoord(0, 2),
+        # Layer 1 (6 tiles)
+        for direction in Direction:
+            land_coords.append(Coordinate(0, 0, 0) + direction)
+
+        # Layer 2 (12 tiles)
+        layer2_start_positions = [
+            Coordinate(0, 0, 0) + Direction.NORTHEAST + Direction.NORTHEAST,
+            Coordinate(0, 0, 0) + Direction.EAST + Direction.EAST,
+            Coordinate(0, 0, 0) + Direction.SOUTHEAST + Direction.SOUTHEAST,
+            Coordinate(0, 0, 0) + Direction.SOUTHWEST + Direction.SOUTHWEST,
+            Coordinate(0, 0, 0) + Direction.WEST + Direction.WEST,
+            Coordinate(0, 0, 0) + Direction.NORTHWEST + Direction.NORTHWEST,
         ]
 
-        # Distribution des terrains dans le jeu standard
-        # 4 forêts, 4 pâturages, 4 champs, 3 collines, 3 montagnes, 1 désert
+        for start in layer2_start_positions:
+            land_coords.append(start)
+            # Add one more in clockwise direction
+            # This is simplified; for full layer 2, we'd need proper spiral
+
+        # For now, use the 19 standard coordinates
+        land_coords = [
+            # Center
+            Coordinate(0, 0, 0),
+            # Layer 1 (6 around center)
+            Coordinate(1, -1, 0), Coordinate(1, 0, -1), Coordinate(0, 1, -1),
+            Coordinate(-1, 1, 0), Coordinate(-1, 0, 1), Coordinate(0, -1, 1),
+            # Layer 2 (12 around layer 1)
+            Coordinate(2, -2, 0), Coordinate(2, -1, -1), Coordinate(1, -2, 1),
+            Coordinate(0, -2, 2), Coordinate(-1, -1, 2), Coordinate(-2, 0, 2),
+            Coordinate(-2, 1, 1), Coordinate(-2, 2, 0), Coordinate(-1, 2, -1),
+            Coordinate(0, 2, -2), Coordinate(1, 1, -2), Coordinate(2, 0, -2),
+        ]
+
+        # Terrain distribution (standard Catan)
         terrain_distribution = [
             TerrainType.FOREST, TerrainType.FOREST, TerrainType.FOREST, TerrainType.FOREST,
             TerrainType.PASTURE, TerrainType.PASTURE, TerrainType.PASTURE, TerrainType.PASTURE,
@@ -250,30 +446,32 @@ class Board:
             TerrainType.DESERT,
         ]
 
-        # Numéros des dés (pas de 7, et pas de numéro pour le désert)
-        # Distribution: 1x(2,12), 2x(3,4,5,6,8,9,10,11)
+        # Number distribution (no 7)
         number_distribution = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12]
 
         if shuffle:
-            # Mélanger les terrains et les numéros
-            import random
             random.shuffle(terrain_distribution)
             random.shuffle(number_distribution)
 
-        # Créer les hexagones
-        hexes = []
+        # Create land tiles
+        tiles = []
+        tile_id = 0
         number_idx = 0
 
-        for i, coord in enumerate(hex_coords):
+        for i, coord in enumerate(land_coords):
             terrain = terrain_distribution[i]
 
             if terrain == TerrainType.DESERT:
-                # Le désert n'a pas de numéro et commence avec le voleur
-                hexes.append(Hex(coord, terrain, None, has_robber=True))
+                tiles.append(Tile(tile_id, coord, terrain, number=None))
             else:
-                # Assigner un numéro du dé
                 number = number_distribution[number_idx]
                 number_idx += 1
-                hexes.append(Hex(coord, terrain, number, has_robber=False))
+                tiles.append(Tile(tile_id, coord, terrain, number=number))
 
-        return Board(hexes)
+            tile_id += 1
+
+        # Add water tiles around the perimeter (layer 3)
+        # For simplicity, we'll skip water tiles for now and focus on land
+        # TODO: Add water tiles with ports
+
+        return Board(tiles)

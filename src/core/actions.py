@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from typing import Union
 from enum import IntEnum
 
-from .board import VertexCoord, EdgeCoord, HexCoord
 from .constants import ResourceType, DevelopmentCardType
 
 
@@ -56,20 +55,20 @@ class RollDiceAction:
 
 @dataclass(frozen=True)
 class BuildSettlementAction:
-    """Construire une colonie."""
-    vertex: VertexCoord
+    """Construire une colonie sur un node (vertex)."""
+    node_id: int  # ID du node où placer la colonie
 
 
 @dataclass(frozen=True)
 class BuildCityAction:
-    """Améliorer une colonie en ville."""
-    vertex: VertexCoord
+    """Améliorer une colonie en ville sur un node."""
+    node_id: int  # ID du node où la colonie existe
 
 
 @dataclass(frozen=True)
 class BuildRoadAction:
-    """Construire une route."""
-    edge: EdgeCoord
+    """Construire une route sur une edge."""
+    edge_id: int  # ID de l'edge où placer la route
 
 
 @dataclass(frozen=True)
@@ -111,10 +110,10 @@ class PlayKnightAction:
     """
     Jouer une carte Chevalier.
 
-    new_robber_hex: hexagone où placer le voleur
+    new_robber_tile: ID du tile où placer le voleur
     steal_from_player: joueur à voler (None si pas de joueur adjacent)
     """
-    new_robber_hex: HexCoord
+    new_robber_tile: int  # tile_id
     steal_from_player: int | None
 
 
@@ -123,10 +122,10 @@ class PlayRoadBuildingAction:
     """
     Jouer une carte Construction de routes.
 
-    edge1, edge2: les 2 routes à construire
+    edge1, edge2: les 2 routes à construire (IDs)
     """
-    edge1: EdgeCoord
-    edge2: EdgeCoord | None  # None si une seule route possible
+    edge1_id: int
+    edge2_id: int | None  # None si une seule route possible
 
 
 @dataclass(frozen=True)
@@ -155,10 +154,10 @@ class MoveRobberAction:
     """
     Déplacer le voleur (quand on fait 7).
 
-    new_hex: hexagone où placer le voleur
+    new_tile: ID du tile où placer le voleur
     steal_from_player: joueur à voler (None si pas de joueur)
     """
-    new_hex: HexCoord
+    new_tile_id: int  # tile_id
     steal_from_player: int | None
 
 

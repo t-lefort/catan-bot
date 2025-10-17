@@ -20,6 +20,7 @@ class TerrainType(IntEnum):
     FIELDS = 3    # Champs (Blé)
     MOUNTAINS = 4 # Montagnes (Minerai)
     DESERT = 5    # Désert (pas de ressource)
+    WATER = 6     # Eau (périmètre du plateau)
 
 
 class DevelopmentCardType(IntEnum):

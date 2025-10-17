@@ -24,4 +24,25 @@ J'ai du itérer plusieurs fois pour qu'il y ait moins de tests qui fail. Au bout
 Et je passe sur gpt-5-high pour regler le dernier bug qui persiste après plusieurs itérations avec Claude Code. 
 ChatGPT semble avoir trouvé le problème tout de suite, je n'ai pas l'impression qu'il a contourné le test, il a juste corrigé une formule mathématique qui devait être une erreur de résonnement de Claude.
 
+## Etape 4
+Je lui demande de pouvoir jouer dans la GUI à une partie complète. Il y a pas mal de choses qui fonctionne très bien mais des bugs bizarre aussi alors que les 124 tests passent. Par exemple il n'y a que 2 des 3 arretes qui fonctionne pour créer une route, ça ne donne pas toutes les ressources de la deuxième colonie et ne donne pas les ressources lors des lancées de dés.
+Il a l'air de comprendre qu'il y a plusieurs définition d'un même vertex et donc se met à utiliser la fonction qu'il avait créé plus tôt is_same_vertex(). Quand il l'a créé la première fois il n'a pas corrigé le problème partout.
+
+## Etape 5
+Finalement je lui fait remarquer que j'ai l'impression qu'il a mis une grosse partie de la logique de jeu dans la GUI plutôt que dans le GameState et donc que ça risque de ne pas correctement fonctionner quand je vais vouloir faire du RL sans GUI. Il reconnait l'erreur et me propose un refactoring complet.
+
+## Etape 6
+Je commence à tester et lui faire part de petits bugs à droite à gauche. C'est fou que les 124 tests passent mais qu'il y ait autant de bugs non detectées. J'ai l'impression qu'il n'est pas très bon pour rédiger des tests pertinents en tout cas pas pour un jeu avec des aspects logiques un peu complexe comme Catan.
+
+## Etape 7
+J'essaye de passer sur ChatGPT pour corriger les bugs car il y en a qu'en même beaucoup avec Claude Code.
+Claude code galère a positionner correctement les ports dans la GUI
+
+## Etape 8
+Le système de coordonée hexagonale ne fonctionnait pas bien.
+Je lui ai donné l'example d'un autre projet de bot catan en lui demandant d'analyser la solution qu'ils utilisaient. Il reconnais qu'il y a plein de problème (je ne sais plus si c'est vrai il est toujours d'accord de toute façon). Il me propose de tout refactoriser ce que j'accepte. Le refactor est tellement gros qu'il crée un fichier .md pour suivre l'avancement.
+Je recommence une session une fois qu'il a fait ce fichier pour eviter d'exploser la fenetre de contexte.
+
+## Etape 9
+Bon j'ai testé pleins de trucs depuis la dernière fois mais rien ne marche. Comme la dernière fois, gros progrès au début mais grosse lacune dans le code et du coup rien ne marche correctement, je vais me renseigner sur une façon d'améliorer le workflow de developpement et je repars à 0 sur le projet.
 
