@@ -11,18 +11,18 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-17T20:32:43Z
+last_updated: 2025-10-17T20:44:15Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 57
-  pending: 53
-  in_progress: 1
-  completed: 3
+  pending: 51
+  in_progress: 0
+  completed: 5
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
-in_progress_task: TEST-001
+in_progress_task: null
 
 sections:
   - id: DOC
@@ -65,20 +65,25 @@ sections:
           - "Cibles de perf simulation (jeux/s)"
       - id: DOC-005
         title: Architecture (engine, sim, GUI, RL)
-        status: pending
+        status: completed
         priority: P1
         dependencies: [DOC-001, DOC-002]
         acceptance_criteria:
           - "Diagrammes modules et dépendances"
           - "Points d'extension (bot/GUI/sim)"
+        notes: |
+          2025-10-17: Ouverture de la tâche — rédaction architecture moteur/sim/GUI/RL
+          2025-10-17: Architecture documentée (docs/architecture.md)
       - id: DOC-006
         title: Schémas de donnée (state/action/serialization)
-        status: pending
+        status: completed
         priority: P1
         dependencies: [DOC-005]
         acceptance_criteria:
           - "Format sérialisable pour engine et sim rapide"
           - "Stable IDs pour actions et entités"
+        notes: |
+          2025-10-17: Schémas initialisés (docs/schemas.md)
 
       - id: DOC-007
         title: Étude catanatron + mapping de réutilisation
@@ -446,7 +451,7 @@ sections:
     tasks:
       - id: TEST-001
         title: Unitaires moteur (types, coûts, placements)
-        status: in_progress
+        status: pending
         priority: P0
         dependencies: [ENG-001, ENG-005]
         acceptance_criteria:
@@ -455,6 +460,7 @@ sections:
           2025-10-17: Contrats initiaux validés (tests verts)
           - catan.engine.rules: constantes VP_TO_WIN, DISCARD_THRESHOLD, COSTS
           - catan.engine.board: Board.standard(), tile/vertex/edge counts
+          2025-10-17: Mise en pause le temps de documenter l'architecture (DOC-005)
       - id: TEST-002
         title: Propriétés (Hypothesis) distribution et invariants
         status: pending
