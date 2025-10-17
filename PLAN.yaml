@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-17T21:08:06Z
+last_updated: 2025-10-17T23:30:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 57
-  pending: 49
+  pending: 48
   in_progress: 0
-  completed: 6
+  completed: 7
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -115,12 +115,19 @@ sections:
           2025-10-17T21:08Z: Plateau standard implémenté (sommets/arêtes indexés, ports, numéros de dés) + tests contractuels verts.
       - id: ENG-002
         title: Phase de setup (placements initiaux)
-        status: pending
+        status: completed
         priority: P0
         dependencies: [ENG-001]
         acceptance_criteria:
           - "Deux tours de placement, ordre serpent"
           - "Distribution de ressources après second placement"
+        notes: |
+          2025-10-17T23:30Z: Implémentation complétée
+          - Tests écrits en premier (test_setup_phase.py): 13 tests couvrant ordre serpent, placements, distribution
+          - Structures créées: GameState, Player, SetupPhase, actions (PlaceSettlement, PlaceRoad)
+          - Logique setup: ordre serpent (J0→J1, puis J1→J0), distribution ressources après 2e placement uniquement
+          - Transition automatique SETUP_ROUND_1 → SETUP_ROUND_2 → PLAY
+          - Tous les tests passent (20/20 au total)
       - id: ENG-003
         title: Lancer de dés et distribution
         status: pending
