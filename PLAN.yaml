@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-17T23:58:00Z
+last_updated: 2025-10-18T00:05:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 57
-  pending: 45
+  pending: 43
   in_progress: 0
-  completed: 9
+  completed: 10
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -157,11 +157,14 @@ sections:
           2025-10-17T23:58Z: Implémentation terminée (tests ENG-004 verts: défausse >9, déplacement voleur, blocage production).
       - id: ENG-005
         title: Construction (routes, colonies, villes)
-        status: pending
+        status: completed
         priority: P0
         dependencies: [ENG-001]
         acceptance_criteria:
           - "Coûts respectés, règles d'adjacence, distance d'une colonie"
+        notes: |
+          2025-10-17T23:59Z: Démarrage (rédaction tests TDD pour routes/colonies/villes).
+          2025-10-18T00:05Z: Implémentation terminée (tests `tests/test_construction.py`, logique ressources et règles adjacence/distance). Tous les tests `pytest` passent.
       - id: ENG-006
         title: Cartes de développement (pioche/jouer)
         status: pending

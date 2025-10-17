@@ -11,7 +11,7 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Dict, List
 
-from catan.engine.rules import DISCARD_THRESHOLD
+from catan.engine.rules import COSTS, DISCARD_THRESHOLD
 
 
 @dataclass
@@ -123,6 +123,7 @@ class GameState:
             True si l'action est légale
         """
         from catan.engine.actions import (
+            BuildCity,
             DiscardResources,
             MoveRobber,
             PlaceRoad,
@@ -208,9 +209,51 @@ class GameState:
                 return False
             return self._player_has_resources(action.steal_from)
 
-        # Sous-phase principale: seul le lancer de dés est implémenté pour l'instant
+        # Sous-phase principale: gérer les actions de construction
         if isinstance(action, RollDice):
             return not self.dice_rolled_this_turn
+
+        current_player = self.players[self.current_player_id]
+
+        if isinstance(action, PlaceRoad):
+            if action.edge_id not in self.board.edges:
+                return False
+            if self._edge_is_occupied(action.edge_id):
+                return False
+            if not self._edge_connected_to_player(current_player, action.edge_id):
+                return False
+            if not action.free and not self.dice_rolled_this_turn:
+                return False
+            if not action.free and not self._player_can_afford(current_player, COSTS["road"]):
+                return False
+            return True
+
+        if isinstance(action, PlaceSettlement):
+            if action.vertex_id not in self.board.vertices:
+                return False
+            if self._vertex_is_occupied(action.vertex_id):
+                return False
+            if not self._vertex_respects_distance_rule(action.vertex_id):
+                return False
+            if not action.free:
+                if not self.dice_rolled_this_turn:
+                    return False
+                if not self._player_can_afford(current_player, COSTS["settlement"]):
+                    return False
+            if not self._vertex_adjacent_to_player_road(current_player, action.vertex_id):
+                return False
+            return True
+
+        if isinstance(action, BuildCity):
+            if action.vertex_id not in self.board.vertices:
+                return False
+            if not self.dice_rolled_this_turn:
+                return False
+            if action.vertex_id not in current_player.settlements:
+                return False
+            if not self._player_can_afford(current_player, COSTS["city"]):
+                return False
+            return True
 
         return False
 
@@ -227,6 +270,7 @@ class GameState:
             ValueError: Si l'action n'est pas légale
         """
         from catan.engine.actions import (
+            BuildCity,
             DiscardResources,
             MoveRobber,
             PlaceRoad,
@@ -264,28 +308,56 @@ class GameState:
             # Placer la colonie
             current_player.settlements.append(action.vertex_id)
             current_player.victory_points += 1
-            new_state_fields["_setup_settlements_placed"] = self._setup_settlements_placed + 1
-            new_state_fields["_waiting_for_road"] = True
+            if not action.free:
+                self._deduct_resources(current_player, COSTS["settlement"])
+
+            if (
+                self.phase in (SetupPhase.SETUP_ROUND_1, SetupPhase.SETUP_ROUND_2)
+                and action.free
+            ):
+                new_state_fields["_setup_settlements_placed"] = (
+                    self._setup_settlements_placed + 1
+                )
+                new_state_fields["_waiting_for_road"] = True
+            else:
+                new_state_fields["_waiting_for_road"] = False
 
         elif isinstance(action, PlaceRoad):
             # Placer la route
             current_player.roads.append(action.edge_id)
-            new_state_fields["_setup_roads_placed"] = self._setup_roads_placed + 1
-            new_state_fields["_waiting_for_road"] = False
+            if not action.free:
+                self._deduct_resources(current_player, COSTS["road"])
 
-            # Distribution de ressources UNIQUEMENT après le 2e placement (SETUP_ROUND_2)
-            if self.phase == SetupPhase.SETUP_ROUND_2:
-                # Récupérer la dernière colonie placée
-                last_settlement = current_player.settlements[-1]
-                vertex = self.board.vertices[last_settlement]
-                # Distribuer une ressource de chaque tuile adjacente (sauf désert)
-                for tile_id in vertex.adjacent_tiles:
-                    tile = self.board.tiles[tile_id]
-                    if tile.resource != "DESERT":
-                        current_player.resources[tile.resource] += 1
+            if (
+                self.phase in (SetupPhase.SETUP_ROUND_1, SetupPhase.SETUP_ROUND_2)
+                and action.free
+            ):
+                new_state_fields["_setup_roads_placed"] = self._setup_roads_placed + 1
+                new_state_fields["_waiting_for_road"] = False
 
-            # Avancer le jeu après placement de la route
-            new_state_fields.update(self._advance_setup_turn())
+                # Distribution de ressources UNIQUEMENT après le 2e placement (SETUP_ROUND_2)
+                if self.phase == SetupPhase.SETUP_ROUND_2:
+                    # Récupérer la dernière colonie placée
+                    last_settlement = current_player.settlements[-1]
+                    vertex = self.board.vertices[last_settlement]
+                    # Distribuer une ressource de chaque tuile adjacente (sauf désert)
+                    for tile_id in vertex.adjacent_tiles:
+                        tile = self.board.tiles[tile_id]
+                        if tile.resource != "DESERT":
+                            current_player.resources[tile.resource] += 1
+
+                # Avancer le jeu après placement de la route (setup uniquement)
+                new_state_fields.update(self._advance_setup_turn())
+            else:
+                new_state_fields["_waiting_for_road"] = False
+
+        elif isinstance(action, BuildCity):
+            # Améliorer une colonie en ville
+            if action.vertex_id in current_player.settlements:
+                current_player.settlements.remove(action.vertex_id)
+            current_player.cities.append(action.vertex_id)
+            current_player.victory_points += 1
+            self._deduct_resources(current_player, COSTS["city"])
 
         elif isinstance(action, RollDice):
             # Lancer les dés
@@ -372,6 +444,65 @@ class GameState:
                     mover.resources[stolen] += 1
 
         return GameState(**new_state_fields)
+
+    def _player_can_afford(self, player: Player, cost: Dict[str, int]) -> bool:
+        """Vérifie que le joueur possède les ressources nécessaires."""
+        return all(player.resources.get(resource, 0) >= amount for resource, amount in cost.items())
+
+    def _deduct_resources(self, player: Player, cost: Dict[str, int]) -> None:
+        """Soustrait les ressources correspondant au coût fourni."""
+        for resource, amount in cost.items():
+            if amount == 0:
+                continue
+            player.resources[resource] -= amount
+
+    def _edge_is_occupied(self, edge_id: int) -> bool:
+        """Indique si une arête est déjà occupée par une route."""
+        return any(edge_id in player.roads for player in self.players)
+
+    def _edge_connected_to_player(self, player: Player, edge_id: int) -> bool:
+        """Vérifie qu'une arête est connectée au réseau du joueur."""
+        edge = self.board.edges[edge_id]
+        player_vertices = set(player.settlements + player.cities)
+        if player_vertices.intersection(edge.vertices):
+            return True
+
+        for owned_edge_id in player.roads:
+            owned_edge = self.board.edges[owned_edge_id]
+            if set(owned_edge.vertices).intersection(edge.vertices):
+                return True
+        return False
+
+    def _vertex_is_occupied(self, vertex_id: int) -> bool:
+        """True si le sommet est occupé par une colonie ou une ville."""
+        for player in self.players:
+            if vertex_id in player.settlements or vertex_id in player.cities:
+                return True
+        return False
+
+    def _vertex_adjacent_vertices(self, vertex_id: int) -> List[int]:
+        """Retourne les sommets adjacents (distance 1) à un sommet donné."""
+        vertex = self.board.vertices[vertex_id]
+        neighbors: List[int] = []
+        for edge_id in vertex.edges:
+            edge = self.board.edges[edge_id]
+            a, b = edge.vertices
+            neighbor = b if a == vertex_id else a
+            neighbors.append(neighbor)
+        return neighbors
+
+    def _vertex_respects_distance_rule(self, vertex_id: int) -> bool:
+        """Applique la règle de distance: aucun voisin ne doit être occupé."""
+        for neighbor in self._vertex_adjacent_vertices(vertex_id):
+            if self._vertex_is_occupied(neighbor):
+                return False
+        return True
+
+    def _vertex_adjacent_to_player_road(self, player: Player, vertex_id: int) -> bool:
+        """Vérifie qu'au moins une route du joueur aboutit sur le sommet."""
+        vertex = self.board.vertices[vertex_id]
+        player_edges = set(player.roads)
+        return any(edge_id in player_edges for edge_id in vertex.edges)
 
     def _distribute_resources(self, dice_value: int, players: List[Player]) -> None:
         """Distribue les ressources selon le lancer de dés.
