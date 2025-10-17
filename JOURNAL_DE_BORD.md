@@ -59,3 +59,7 @@ Je vais lui demander de commencer à faire la doc et faire les tests avant de cr
 
 ## Etape 13
 La méthode a l'air de bien fonctionner avec ChatGPT, je vais faire une passe avec Claude Code pour voir comment il s'en sort. Si ça marche bien, ça serait bien de pouvoir les faire bosser en parallèle, il y a des outils pour ça, il faudrait que je test. Claude est plus rapide mais il ne me donne pas l'impression de bien faire les chose dans l'ordre. Il crée bien les tests avant de dev la fonctionnalité mais je ne pense pas que c'est ce qu'aurait fait ChatGPT. 
+
+## Etape 14
+Il faudrait aussi définir un template pour les commits comme Claude fait. Chatgpt fais des commits tout pourris sans détail. Et il faudra que je passe ce journal dans une IA pour en tirer les idées et faire un boilerplate pour projets IA
+J'ai aussi arreté d'utiliser le mode "Plan" de Claude que j'avais testé et qui marche bien.

@@ -11,6 +11,8 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Dict, List
 
+from catan.engine.rules import DISCARD_THRESHOLD
+
 
 @dataclass
 class Player:
@@ -44,6 +46,14 @@ class SetupPhase(Enum):
     PLAY = "PLAY"
 
 
+class TurnSubPhase(Enum):
+    """Sous-phases d'un tour en phase PLAY."""
+
+    MAIN = "MAIN"
+    ROBBER_DISCARD = "ROBBER_DISCARD"
+    ROBBER_MOVE = "ROBBER_MOVE"
+
+
 @dataclass
 class GameState:
     """État immuable du jeu.
@@ -63,6 +73,11 @@ class GameState:
     # État du lancer de dés
     last_dice_roll: int | None = None
     dice_rolled_this_turn: bool = False
+    turn_subphase: "TurnSubPhase" = TurnSubPhase.MAIN
+    pending_discards: Dict[int, int] = field(default_factory=dict)
+    pending_discard_queue: List[int] = field(default_factory=list)
+    robber_tile_id: int = 0
+    robber_roller_id: int | None = None
 
     @classmethod
     def new_1v1_game(cls, player_names: List[str] | None = None) -> "GameState":
@@ -84,12 +99,18 @@ class GameState:
             Player(player_id=i, name=name) for i, name in enumerate(player_names)
         ]
 
+        robber_tile_id = next(
+            (tile_id for tile_id, tile in board.tiles.items() if tile.has_robber),
+            0,
+        )
+
         return cls(
             board=board,
             players=players,
             phase=SetupPhase.SETUP_ROUND_1,
             current_player_id=0,
             turn_number=0,
+            robber_tile_id=robber_tile_id,
         )
 
     def is_action_legal(self, action: "Action") -> bool:  # type: ignore
@@ -101,7 +122,13 @@ class GameState:
         Returns:
             True si l'action est légale
         """
-        from catan.engine.actions import PlaceRoad, PlaceSettlement, RollDice
+        from catan.engine.actions import (
+            DiscardResources,
+            MoveRobber,
+            PlaceRoad,
+            PlaceSettlement,
+            RollDice,
+        )
 
         # Pendant setup, les règles sont spécifiques
         if self.phase in (SetupPhase.SETUP_ROUND_1, SetupPhase.SETUP_ROUND_2):
@@ -140,12 +167,51 @@ class GameState:
             return False
 
         # Phase PLAY
-        if self.phase == SetupPhase.PLAY:
-            if isinstance(action, RollDice):
-                # Le lancer de dés n'est légal qu'au début du tour
-                return not self.dice_rolled_this_turn
+        if self.phase != SetupPhase.PLAY:
+            return False
 
-        # TODO: autres règles pour phase PLAY
+        if self.turn_subphase == TurnSubPhase.ROBBER_DISCARD:
+            if not isinstance(action, DiscardResources):
+                return False
+            required = self.pending_discards.get(self.current_player_id)
+            if required is None:
+                return False
+            total = sum(action.resources.values())
+            if total != required:
+                return False
+            player = self.players[self.current_player_id]
+            for resource, amount in action.resources.items():
+                if amount < 0:
+                    return False
+                if player.resources.get(resource, 0) < amount:
+                    return False
+            return True
+
+        if self.turn_subphase == TurnSubPhase.ROBBER_MOVE:
+            if not isinstance(action, MoveRobber):
+                return False
+            if action.tile_id not in self.board.tiles:
+                return False
+            if action.tile_id == self.robber_tile_id:
+                return False
+            roller_id = (
+                self.robber_roller_id
+                if self.robber_roller_id is not None
+                else self.current_player_id
+            )
+            if self.current_player_id != roller_id:
+                return False
+            valid_targets = self._robber_steal_targets(action.tile_id, roller_id)
+            if not valid_targets:
+                return action.steal_from is None
+            if action.steal_from not in valid_targets:
+                return False
+            return self._player_has_resources(action.steal_from)
+
+        # Sous-phase principale: seul le lancer de dés est implémenté pour l'instant
+        if isinstance(action, RollDice):
+            return not self.dice_rolled_this_turn
+
         return False
 
     def apply_action(self, action: "Action") -> "GameState":  # type: ignore
@@ -160,7 +226,13 @@ class GameState:
         Raises:
             ValueError: Si l'action n'est pas légale
         """
-        from catan.engine.actions import PlaceRoad, PlaceSettlement, RollDice
+        from catan.engine.actions import (
+            DiscardResources,
+            MoveRobber,
+            PlaceRoad,
+            PlaceSettlement,
+            RollDice,
+        )
         import random
 
         if not self.is_action_legal(action):
@@ -181,6 +253,11 @@ class GameState:
             "_waiting_for_road": self._waiting_for_road,
             "last_dice_roll": self.last_dice_roll,
             "dice_rolled_this_turn": self.dice_rolled_this_turn,
+            "turn_subphase": self.turn_subphase,
+            "pending_discards": copy.deepcopy(self.pending_discards),
+            "pending_discard_queue": list(self.pending_discard_queue),
+            "robber_tile_id": self.robber_tile_id,
+            "robber_roller_id": self.robber_roller_id,
         }
 
         if isinstance(action, PlaceSettlement):
@@ -222,10 +299,77 @@ class GameState:
             new_state_fields["last_dice_roll"] = dice_total
             new_state_fields["dice_rolled_this_turn"] = True
 
-            # Si c'est un 7, pas de distribution (voleur)
-            if dice_total != 7:
-                # Distribuer les ressources
+            if dice_total == 7:
+                requirements = self._compute_discard_requirements(new_players)
+                ordered_players = list(requirements.keys())
+                new_state_fields["pending_discards"] = requirements
+                new_state_fields["pending_discard_queue"] = ordered_players
+                new_state_fields["robber_roller_id"] = self.current_player_id
+
+                if ordered_players:
+                    new_state_fields["turn_subphase"] = TurnSubPhase.ROBBER_DISCARD
+                    new_state_fields["current_player_id"] = ordered_players[0]
+                else:
+                    new_state_fields["turn_subphase"] = TurnSubPhase.ROBBER_MOVE
+                    new_state_fields["current_player_id"] = self.current_player_id
+            else:
+                new_state_fields["pending_discards"] = {}
+                new_state_fields["pending_discard_queue"] = []
+                new_state_fields["turn_subphase"] = TurnSubPhase.MAIN
+                new_state_fields["robber_roller_id"] = None
                 self._distribute_resources(dice_total, new_players)
+
+        elif isinstance(action, DiscardResources):
+            pending_discards: Dict[int, int] = new_state_fields["pending_discards"]
+            pending_queue: List[int] = new_state_fields["pending_discard_queue"]
+            required = pending_discards.get(self.current_player_id, 0)
+
+            discarded_total = sum(action.resources.values())
+            if discarded_total != required:
+                raise ValueError("Quantité de défausse incorrecte")
+
+            for resource, amount in action.resources.items():
+                if amount == 0:
+                    continue
+                current_player.resources[resource] -= amount
+
+            if self.current_player_id in pending_discards:
+                del pending_discards[self.current_player_id]
+
+            if pending_queue and pending_queue[0] == self.current_player_id:
+                pending_queue.pop(0)
+
+            if pending_queue:
+                new_state_fields["current_player_id"] = pending_queue[0]
+            else:
+                new_state_fields["turn_subphase"] = TurnSubPhase.ROBBER_MOVE
+                roller_id = (
+                    self.robber_roller_id
+                    if self.robber_roller_id is not None
+                    else self.current_player_id
+                )
+                new_state_fields["current_player_id"] = roller_id
+
+        elif isinstance(action, MoveRobber):
+            roller_id = (
+                self.robber_roller_id
+                if self.robber_roller_id is not None
+                else self.current_player_id
+            )
+            mover = new_players[roller_id]
+
+            new_state_fields["board"] = self._board_with_robber(action.tile_id)
+            new_state_fields["robber_tile_id"] = action.tile_id
+            new_state_fields["turn_subphase"] = TurnSubPhase.MAIN
+            new_state_fields["pending_discards"] = {}
+            new_state_fields["pending_discard_queue"] = []
+            new_state_fields["current_player_id"] = roller_id
+            new_state_fields["robber_roller_id"] = None
+
+            if action.steal_from is not None:
+                stolen = self._steal_resource(new_players[action.steal_from])
+                if stolen is not None:
+                    mover.resources[stolen] += 1
 
         return GameState(**new_state_fields)
 
@@ -246,7 +390,9 @@ class GameState:
             if tile.pip != dice_value:
                 continue
 
-            # TODO: ignorer si le voleur est sur cette tuile (ENG-004)
+            # Ignorer si le voleur bloque cette tuile
+            if tile_id == self.robber_tile_id:
+                continue
 
             # Distribuer aux colonies/villes sur les sommets adjacents
             for vertex_id in tile.vertices:
@@ -257,6 +403,60 @@ class GameState:
                     # Ville = 2 ressources
                     elif vertex_id in player.cities:
                         player.resources[tile.resource] += 2
+
+    def _compute_discard_requirements(self, players: List[Player]) -> Dict[int, int]:
+        """Calcule les quantités à défausser pour chaque joueur après un 7."""
+        requirements: Dict[int, int] = {}
+        for player in players:
+            total_cards = sum(player.resources.values())
+            if total_cards > DISCARD_THRESHOLD:
+                requirements[player.player_id] = total_cards - DISCARD_THRESHOLD
+        # Garantir un ordre déterministe (ID croissant)
+        return dict(sorted(requirements.items()))
+
+    def _player_has_resources(self, player_id: int) -> bool:
+        """Indique si un joueur possède au moins une carte ressource."""
+        player = self.players[player_id]
+        return any(amount > 0 for amount in player.resources.values())
+
+    def _robber_steal_targets(self, tile_id: int, roller_id: int) -> List[int]:
+        """Retourne les joueurs adverses volables sur une tuile."""
+        tile = self.board.tiles[tile_id]
+        targets: List[int] = []
+        for player in self.players:
+            if player.player_id == roller_id:
+                continue
+            if any(
+                vertex in player.settlements or vertex in player.cities
+                for vertex in tile.vertices
+            ):
+                if self._player_has_resources(player.player_id):
+                    targets.append(player.player_id)
+        return targets
+
+    def _steal_resource(self, victim: Player) -> str | None:
+        """Retire une ressource au hasard déterministe (ordre alphabétique)."""
+        for resource in sorted(victim.resources.keys()):
+            if victim.resources[resource] > 0:
+                victim.resources[resource] -= 1
+                return resource
+        return None
+
+    def _board_with_robber(self, target_tile_id: int) -> "Board":
+        """Retourne un plateau avec le voleur repositionné sur la tuile cible."""
+        tiles = dict(self.board.tiles)
+        if self.robber_tile_id in tiles:
+            tiles[self.robber_tile_id] = replace(
+                tiles[self.robber_tile_id], has_robber=False
+            )
+        tiles[target_tile_id] = replace(tiles[target_tile_id], has_robber=True)
+        board_cls = self.board.__class__
+        return board_cls(
+            tiles=tiles,
+            vertices=self.board.vertices,
+            edges=self.board.edges,
+            ports=self.board.ports,
+        )
 
     def _advance_setup_turn(self) -> dict:
         """Calcule le prochain état après un placement complet (colonie + route).
@@ -297,4 +497,5 @@ __all__ = [
     "GameState",
     "Player",
     "SetupPhase",
+    "TurnSubPhase",
 ]

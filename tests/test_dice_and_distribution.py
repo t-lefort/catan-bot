@@ -1,4 +1,4 @@
-"""Tests pour le lancer de dés et distribution de ressources (ENG-003).
+"""Tests pour le lancer de dés et distribution de ressources (ENG-003, ENG-004).
 
 Spécifications (docs/specs.md):
 - Lancer de 2 dés (2 à 12)
@@ -8,9 +8,17 @@ Spécifications (docs/specs.md):
 """
 
 import pytest
+from dataclasses import replace
+
 from catan.engine.board import Board
-from catan.engine.state import GameState, SetupPhase
-from catan.engine.actions import RollDice, PlaceSettlement, PlaceRoad
+from catan.engine.state import GameState, SetupPhase, TurnSubPhase
+from catan.engine.actions import (
+    RollDice,
+    PlaceSettlement,
+    PlaceRoad,
+    DiscardResources,
+    MoveRobber,
+)
 
 
 class TestDiceRoll:
@@ -122,18 +130,36 @@ class TestResourceDistribution:
         """Le voleur bloque la production de la tuile où il se trouve."""
         state = self._setup_game_with_known_settlement()
 
-        # Placer le voleur sur une tuile adjacente à une colonie
-        settlement_vertex = 10
+        # Préparer un sommet connu et la tuile associée
+        settlement_vertex = state.players[0].settlements[0]
         vertex = state.board.vertices[settlement_vertex]
-        robber_tile_id = vertex.adjacent_tiles[0]
-        robber_tile = state.board.tiles[robber_tile_id]
+        robber_tile_id = next(
+            tile_id
+            for tile_id in vertex.adjacent_tiles
+            if state.board.tiles[tile_id].resource != "DESERT"
+            and state.board.tiles[tile_id].pip is not None
+        )
+        target_tile = state.board.tiles[robber_tile_id]
 
-        # Déplacer le voleur (nécessite implémentation de MoveRobber)
-        # Pour l'instant, on suppose que le voleur est déjà placé
-        # state = state with robber on robber_tile_id
+        # État: voleur positionné sur la tuile cible, phase principale
+        state.robber_tile_id = robber_tile_id  # type: ignore[attr-defined]
+        state = replace(state, dice_rolled_this_turn=False, last_dice_roll=None)
+        state.turn_subphase = TurnSubPhase.MAIN  # type: ignore[attr-defined]
 
-        # TODO: implémenter test complet une fois MoveRobber disponible
-        pass
+        # Suivre les ressources avant le lancer
+        player0 = state.players[0]
+        initial_resource = player0.resources[target_tile.resource]
+
+        # Lancer les dés avec le numéro de la tuile bloquée
+        total = target_tile.pip
+        assert total is not None
+        die1 = min(total - 1, 6)
+        die2 = total - die1
+        new_state = state.apply_action(RollDice(forced_value=(die1, die2)))
+
+        # Aucune ressource ne doit être distribuée pour cette tuile
+        assert new_state.players[0].resources[target_tile.resource] == initial_resource
+
 
     def test_distribution_to_multiple_players(self):
         """Si plusieurs joueurs ont des colonies sur le même numéro, tous reçoivent."""
@@ -250,3 +276,110 @@ class TestSevenRoll:
             state = state.apply_action(PlaceRoad(edge_id=edge_id, free=True))
         assert state.phase == SetupPhase.PLAY
         return state
+
+
+class TestRobberSevenResolution:
+    """Tests spécifiques à la résolution du 7 (défausse + déplacement du voleur)."""
+
+    def test_roll_seven_requires_discard_when_above_threshold(self):
+        """Un joueur > 9 cartes doit défausser après un 7."""
+        state = self._setup_game_with_settlements()
+
+        # Joueur 0 avec 13 cartes, Joueur 1 sous le seuil
+        state.players[0].resources = {
+            "BRICK": 5,
+            "LUMBER": 2,
+            "WOOL": 2,
+            "GRAIN": 2,
+            "ORE": 2,
+        }
+        state.players[1].resources = {
+            "BRICK": 1,
+            "LUMBER": 1,
+            "WOOL": 1,
+            "GRAIN": 1,
+            "ORE": 1,
+        }
+
+        new_state = state.apply_action(RollDice(forced_value=(3, 4)))
+
+        assert new_state.turn_subphase == TurnSubPhase.ROBBER_DISCARD
+        assert new_state.pending_discards == {0: 4}
+        assert new_state.current_player_id == 0
+        assert new_state.robber_roller_id == 0
+
+    def test_discard_action_reduces_hand_and_advances_phase(self):
+        """La défausse ramène la main à 9 cartes puis passe à la phase déplacement."""
+        state = self._state_after_seven_with_pending_discard()
+
+        discard_action = DiscardResources(resources={"BRICK": 2, "LUMBER": 2})
+        new_state = state.apply_action(discard_action)
+
+        assert new_state.pending_discards == {}
+        assert new_state.turn_subphase == TurnSubPhase.ROBBER_MOVE
+        assert new_state.current_player_id == new_state.robber_roller_id
+        assert sum(new_state.players[0].resources.values()) == 9
+
+    def test_move_robber_updates_location_and_steals(self):
+        """Déplacer le voleur met à jour sa position et vole 1 ressource si possible."""
+        state = self._state_after_seven_with_pending_discard()
+        state = state.apply_action(DiscardResources(resources={"BRICK": 2, "LUMBER": 2}))
+
+        # Préparer les ressources pour que le vol soit déterministe
+        for resource in state.players[0].resources:
+            state.players[0].resources[resource] = 0
+        state.players[1].resources = {
+            "BRICK": 0,
+            "LUMBER": 0,
+            "WOOL": 2,
+            "GRAIN": 0,
+            "ORE": 0,
+        }
+
+        # Choisir une tuile adjacente à une colonie de J1 (non désert, avec numéro)
+        settlement_vertex = state.players[1].settlements[0]
+        vertex = state.board.vertices[settlement_vertex]
+        target_tile_id = next(
+            tile_id
+            for tile_id in vertex.adjacent_tiles
+            if state.board.tiles[tile_id].resource != "DESERT"
+            and state.board.tiles[tile_id].pip is not None
+        )
+
+        roller_id = state.robber_roller_id
+        assert roller_id is not None
+
+        new_state = state.apply_action(MoveRobber(tile_id=target_tile_id, steal_from=1))
+
+        assert new_state.robber_tile_id == target_tile_id
+        assert new_state.turn_subphase == TurnSubPhase.MAIN
+        assert new_state.current_player_id == roller_id
+        assert new_state.robber_roller_id is None
+        assert new_state.players[1].resources["WOOL"] == 1
+        assert new_state.players[0].resources["WOOL"] == 1
+
+    # Helpers -----------------------------------------------------------------
+
+    def _state_after_seven_with_pending_discard(self) -> GameState:
+        """Prépare un état où J0 doit encore défausser après un 7."""
+        state = self._setup_game_with_settlements()
+        state.players[0].resources = {
+            "BRICK": 5,
+            "LUMBER": 2,
+            "WOOL": 2,
+            "GRAIN": 2,
+            "ORE": 2,
+        }
+        state.players[1].resources = {
+            "BRICK": 1,
+            "LUMBER": 1,
+            "WOOL": 1,
+            "GRAIN": 1,
+            "ORE": 1,
+        }
+        state = state.apply_action(RollDice(forced_value=(3, 4)))
+        assert state.turn_subphase == TurnSubPhase.ROBBER_DISCARD
+        return state
+
+    def _setup_game_with_settlements(self) -> GameState:
+        return TestResourceDistribution()._setup_game_with_settlements()

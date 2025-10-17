@@ -6,6 +6,7 @@ Définit les actions possibles conformément aux schémas (docs/schemas.md).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Dict
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,17 @@ class MoveRobber(Action):
 
 
 @dataclass(frozen=True)
+class DiscardResources(Action):
+    """Défausse des ressources lors d'un 7.
+
+    Args:
+        resources: Quantités à défausser par ressource.
+    """
+
+    resources: Dict[str, int]
+
+
+@dataclass(frozen=True)
 class EndTurn(Action):
     """Termine le tour du joueur actuel."""
 
@@ -90,5 +102,6 @@ __all__ = [
     "BuildCity",
     "RollDice",
     "MoveRobber",
+    "DiscardResources",
     "EndTurn",
 ]

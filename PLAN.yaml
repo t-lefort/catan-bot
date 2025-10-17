@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-17T23:45:00Z
+last_updated: 2025-10-17T23:58:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 57
-  pending: 47
+  pending: 45
   in_progress: 0
-  completed: 8
+  completed: 9
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -146,12 +146,15 @@ sections:
           - Tous les tests passent (33/33 au total incluant tests précédents)
       - id: ENG-004
         title: Voleur + défausse >9 + vol
-        status: pending
+        status: completed
         priority: P0
         dependencies: [ENG-003]
         acceptance_criteria:
           - "Défausse si main > 9, plafond 9"
           - "Déplacement voleur, choix case, vol valide"
+        notes: |
+          2025-10-17T23:55Z: Démarrage implémentation. Priorité aux tests de défausse et déplacement/vol.
+          2025-10-17T23:58Z: Implémentation terminée (tests ENG-004 verts: défausse >9, déplacement voleur, blocage production).
       - id: ENG-005
         title: Construction (routes, colonies, villes)
         status: pending
