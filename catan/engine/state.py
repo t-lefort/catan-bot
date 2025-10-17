@@ -9,9 +9,37 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import Dict, List
+from typing import Dict, Iterable, List, Optional, Set
 
 from catan.engine.rules import COSTS, DISCARD_THRESHOLD
+
+RESOURCE_TYPES: tuple[str, ...] = ("BRICK", "LUMBER", "WOOL", "GRAIN", "ORE")
+DEV_CARD_TYPES: tuple[str, ...] = (
+    "KNIGHT",
+    "ROAD_BUILDING",
+    "YEAR_OF_PLENTY",
+    "MONOPOLY",
+    "VICTORY_POINT",
+)
+PROGRESS_CARD_TYPES: tuple[str, ...] = (
+    "ROAD_BUILDING",
+    "YEAR_OF_PLENTY",
+    "MONOPOLY",
+)
+DEFAULT_DEV_DECK: tuple[str, ...] = (
+    ("KNIGHT",) * 14
+    + ("VICTORY_POINT",) * 5
+    + ("ROAD_BUILDING",) * 2
+    + ("YEAR_OF_PLENTY",) * 2
+    + ("MONOPOLY",) * 2
+)
+BANK_STARTING_RESOURCES: Dict[str, int] = {
+    "BRICK": 19,
+    "LUMBER": 19,
+    "WOOL": 19,
+    "GRAIN": 19,
+    "ORE": 19,
+}
 
 
 @dataclass
@@ -21,21 +49,22 @@ class Player:
     player_id: int
     name: str
     resources: Dict[str, int] = field(
-        default_factory=lambda: {
-            "BRICK": 0,
-            "LUMBER": 0,
-            "WOOL": 0,
-            "GRAIN": 0,
-            "ORE": 0,
-        }
+        default_factory=lambda: {resource: 0 for resource in RESOURCE_TYPES}
     )
     settlements: List[int] = field(default_factory=list)  # vertex_ids
     cities: List[int] = field(default_factory=list)  # vertex_ids
     roads: List[int] = field(default_factory=list)  # edge_ids
     dev_cards: Dict[str, int] = field(
-        default_factory=lambda: {"KNIGHT": 0, "PROGRESS": 0, "VP": 0}
+        default_factory=lambda: {card: 0 for card in DEV_CARD_TYPES}
+    )
+    new_dev_cards: Dict[str, int] = field(
+        default_factory=lambda: {card: 0 for card in DEV_CARD_TYPES}
+    )
+    played_dev_cards: Dict[str, int] = field(
+        default_factory=lambda: {card: 0 for card in ("KNIGHT",) + PROGRESS_CARD_TYPES}
     )
     victory_points: int = 0
+    hidden_victory_points: int = 0
 
 
 class SetupPhase(Enum):
@@ -78,17 +107,31 @@ class GameState:
     pending_discard_queue: List[int] = field(default_factory=list)
     robber_tile_id: int = 0
     robber_roller_id: int | None = None
+    dev_deck: List[str] = field(default_factory=list)
+    bank_resources: Dict[str, int] = field(
+        default_factory=lambda: dict(BANK_STARTING_RESOURCES)
+    )
 
     @classmethod
-    def new_1v1_game(cls, player_names: List[str] | None = None) -> "GameState":
+    def new_1v1_game(
+        cls,
+        player_names: List[str] | None = None,
+        *,
+        dev_deck: List[str] | None = None,
+        bank_resources: Dict[str, int] | None = None,
+    ) -> "GameState":
         """Crée un nouveau jeu 1v1 avec plateau standard.
 
         Args:
             player_names: Noms des joueurs (par défaut ["Player 0", "Player 1"])
+            dev_deck: Ordre initial des cartes de développement (optionnel)
+            bank_resources: Inventaire initial de la banque (optionnel)
 
         Returns:
             État initial en phase SETUP_ROUND_1
         """
+        import random
+
         from catan.engine.board import Board
 
         if player_names is None:
@@ -98,6 +141,17 @@ class GameState:
         players = [
             Player(player_id=i, name=name) for i, name in enumerate(player_names)
         ]
+
+        if dev_deck is None:
+            shuffled_deck = list(DEFAULT_DEV_DECK)
+            random.Random().shuffle(shuffled_deck)
+        else:
+            shuffled_deck = list(dev_deck)
+
+        if bank_resources is None:
+            bank = dict(BANK_STARTING_RESOURCES)
+        else:
+            bank = dict(bank_resources)
 
         robber_tile_id = next(
             (tile_id for tile_id, tile in board.tiles.items() if tile.has_robber),
@@ -111,6 +165,8 @@ class GameState:
             current_player_id=0,
             turn_number=0,
             robber_tile_id=robber_tile_id,
+            dev_deck=shuffled_deck,
+            bank_resources=bank,
         )
 
     def is_action_legal(self, action: "Action") -> bool:  # type: ignore
@@ -123,11 +179,14 @@ class GameState:
             True si l'action est légale
         """
         from catan.engine.actions import (
+            BuyDevelopment,
             BuildCity,
             DiscardResources,
             MoveRobber,
             PlaceRoad,
             PlaceSettlement,
+            PlayKnight,
+            PlayProgress,
             RollDice,
         )
 
@@ -215,6 +274,69 @@ class GameState:
 
         current_player = self.players[self.current_player_id]
 
+        if isinstance(action, BuyDevelopment):
+            if self.turn_subphase != TurnSubPhase.MAIN:
+                return False
+            if not self.dice_rolled_this_turn:
+                return False
+            if not self.dev_deck:
+                return False
+            if not self._player_can_afford(current_player, COSTS["development"]):
+                return False
+            return True
+
+        if isinstance(action, PlayKnight):
+            if self.turn_subphase != TurnSubPhase.MAIN:
+                return False
+            if current_player.new_dev_cards.get("KNIGHT", 0) > 0:
+                return False
+            return current_player.dev_cards.get("KNIGHT", 0) > 0
+
+        if isinstance(action, PlayProgress):
+            if self.turn_subphase != TurnSubPhase.MAIN:
+                return False
+            card_type = action.card
+            if card_type not in PROGRESS_CARD_TYPES:
+                return False
+            if current_player.new_dev_cards.get(card_type, 0) > 0:
+                return False
+            if current_player.dev_cards.get(card_type, 0) <= 0:
+                return False
+
+            if card_type == "ROAD_BUILDING":
+                if action.edges is None or len(action.edges) != 2:
+                    return False
+                if len(set(action.edges)) != len(action.edges):
+                    return False
+                occupied = self._occupied_edges()
+                staged: Set[int] = set()
+                for edge_id in action.edges:
+                    if edge_id not in self.board.edges:
+                        return False
+                    if edge_id in occupied or edge_id in staged:
+                        return False
+                    if not self._edge_connected_to_player(
+                        current_player, edge_id, staged
+                    ):
+                        return False
+                    staged.add(edge_id)
+                return True
+
+            if card_type == "YEAR_OF_PLENTY":
+                if not action.resources:
+                    return False
+                if any(resource not in RESOURCE_TYPES for resource in action.resources):
+                    return False
+                total = sum(action.resources.values())
+                if total != 2:
+                    return False
+                return self._bank_has_resources(action.resources)
+
+            if card_type == "MONOPOLY":
+                return action.resource in RESOURCE_TYPES
+
+            return False
+
         if isinstance(action, PlaceRoad):
             if action.edge_id not in self.board.edges:
                 return False
@@ -270,11 +392,14 @@ class GameState:
             ValueError: Si l'action n'est pas légale
         """
         from catan.engine.actions import (
+            BuyDevelopment,
             BuildCity,
             DiscardResources,
             MoveRobber,
             PlaceRoad,
             PlaceSettlement,
+            PlayKnight,
+            PlayProgress,
             RollDice,
         )
         import random
@@ -302,6 +427,8 @@ class GameState:
             "pending_discard_queue": list(self.pending_discard_queue),
             "robber_tile_id": self.robber_tile_id,
             "robber_roller_id": self.robber_roller_id,
+            "dev_deck": list(self.dev_deck),
+            "bank_resources": copy.deepcopy(self.bank_resources),
         }
 
         if isinstance(action, PlaceSettlement):
@@ -310,6 +437,9 @@ class GameState:
             current_player.victory_points += 1
             if not action.free:
                 self._deduct_resources(current_player, COSTS["settlement"])
+                self._add_resources_to_bank(
+                    new_state_fields["bank_resources"], COSTS["settlement"]
+                )
 
             if (
                 self.phase in (SetupPhase.SETUP_ROUND_1, SetupPhase.SETUP_ROUND_2)
@@ -327,6 +457,9 @@ class GameState:
             current_player.roads.append(action.edge_id)
             if not action.free:
                 self._deduct_resources(current_player, COSTS["road"])
+                self._add_resources_to_bank(
+                    new_state_fields["bank_resources"], COSTS["road"]
+                )
 
             if (
                 self.phase in (SetupPhase.SETUP_ROUND_1, SetupPhase.SETUP_ROUND_2)
@@ -358,6 +491,56 @@ class GameState:
             current_player.cities.append(action.vertex_id)
             current_player.victory_points += 1
             self._deduct_resources(current_player, COSTS["city"])
+            self._add_resources_to_bank(
+                new_state_fields["bank_resources"], COSTS["city"]
+            )
+
+        elif isinstance(action, BuyDevelopment):
+            if not new_state_fields["dev_deck"]:
+                raise ValueError("Pioche de développement vide")
+            card = new_state_fields["dev_deck"].pop(0)
+            self._deduct_resources(current_player, COSTS["development"])
+            self._add_resources_to_bank(
+                new_state_fields["bank_resources"], COSTS["development"]
+            )
+            self._grant_new_dev_card(current_player, card)
+            if card == "VICTORY_POINT":
+                self._grant_hidden_victory_point(current_player)
+
+        elif isinstance(action, PlayKnight):
+            current_player.dev_cards["KNIGHT"] -= 1
+            current_player.played_dev_cards["KNIGHT"] += 1
+            new_state_fields["turn_subphase"] = TurnSubPhase.ROBBER_MOVE
+            new_state_fields["pending_discards"] = {}
+            new_state_fields["pending_discard_queue"] = []
+            new_state_fields["robber_roller_id"] = self.current_player_id
+            new_state_fields["current_player_id"] = self.current_player_id
+
+        elif isinstance(action, PlayProgress):
+            card_type = action.card
+            current_player.dev_cards[card_type] -= 1
+            if card_type == "ROAD_BUILDING":
+                for edge_id in action.edges or []:
+                    current_player.roads.append(edge_id)
+            elif card_type == "YEAR_OF_PLENTY":
+                resources = action.resources or {}
+                self._remove_resources_from_bank(
+                    new_state_fields["bank_resources"], resources
+                )
+                for resource, amount in resources.items():
+                    current_player.resources[resource] += amount
+            elif card_type == "MONOPOLY":
+                resource = action.resource or ""
+                total_collected = 0
+                for player in new_players:
+                    if player.player_id == self.current_player_id:
+                        continue
+                    amount = player.resources.get(resource, 0)
+                    if amount > 0:
+                        total_collected += amount
+                        player.resources[resource] = 0
+                current_player.resources[resource] += total_collected
+            current_player.played_dev_cards[card_type] += 1
 
         elif isinstance(action, RollDice):
             # Lancer les dés
@@ -404,6 +587,9 @@ class GameState:
                 if amount == 0:
                     continue
                 current_player.resources[resource] -= amount
+            self._add_resources_to_bank(
+                new_state_fields["bank_resources"], action.resources
+            )
 
             if self.current_player_id in pending_discards:
                 del pending_discards[self.current_player_id]
@@ -456,18 +642,73 @@ class GameState:
                 continue
             player.resources[resource] -= amount
 
+    @staticmethod
+    def _add_resources_to_bank(bank: Dict[str, int], resources: Dict[str, int]) -> None:
+        """Ajoute des ressources à la banque (ex: achat de carte)."""
+        for resource, amount in resources.items():
+            if amount == 0:
+                continue
+            bank[resource] += amount
+
+    @staticmethod
+    def _remove_resources_from_bank(
+        bank: Dict[str, int], resources: Dict[str, int]
+    ) -> None:
+        """Retire des ressources à la banque (ex: Year of Plenty)."""
+        for resource, amount in resources.items():
+            if amount == 0:
+                continue
+            available = bank.get(resource, 0)
+            if available < amount:
+                raise ValueError("Bank cannot provide requested resources")
+            bank[resource] = available - amount
+
+    def _bank_has_resources(self, resources: Dict[str, int]) -> bool:
+        """Vérifie que la banque possède les ressources demandées."""
+        for resource, amount in resources.items():
+            if self.bank_resources.get(resource, 0) < amount:
+                return False
+        return True
+
+    def _grant_new_dev_card(self, player: Player, card: str) -> None:
+        """Ajoute une carte de développement fraîchement achetée."""
+        if card not in player.new_dev_cards:
+            player.new_dev_cards[card] = 0
+        player.new_dev_cards[card] += 1
+
+    @staticmethod
+    def _grant_hidden_victory_point(player: Player) -> None:
+        """Ajoute un point de victoire caché à un joueur."""
+        player.hidden_victory_points += 1
+
     def _edge_is_occupied(self, edge_id: int) -> bool:
         """Indique si une arête est déjà occupée par une route."""
         return any(edge_id in player.roads for player in self.players)
 
-    def _edge_connected_to_player(self, player: Player, edge_id: int) -> bool:
+    def _occupied_edges(self) -> Set[int]:
+        """Retourne l'ensemble des arêtes occupées par au moins une route."""
+        occupied: Set[int] = set()
+        for player in self.players:
+            occupied.update(player.roads)
+        return occupied
+
+    def _edge_connected_to_player(
+        self,
+        player: Player,
+        edge_id: int,
+        additional_edges: Optional[Iterable[int]] = None,
+    ) -> bool:
         """Vérifie qu'une arête est connectée au réseau du joueur."""
         edge = self.board.edges[edge_id]
         player_vertices = set(player.settlements + player.cities)
         if player_vertices.intersection(edge.vertices):
             return True
 
-        for owned_edge_id in player.roads:
+        player_edges = set(player.roads)
+        if additional_edges:
+            player_edges.update(additional_edges)
+
+        for owned_edge_id in player_edges:
             owned_edge = self.board.edges[owned_edge_id]
             if set(owned_edge.vertices).intersection(edge.vertices):
                 return True

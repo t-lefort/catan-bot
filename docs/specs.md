@@ -8,7 +8,7 @@
 - Construction: règles d’adjacence, distance d’une colonie, connexité des routes.
 - Coûts: route (Argile+Bois), colonie (Argile+Bois+Laine+Blé), ville (2×Blé+3×Minerai), dev (Laine+Blé+Minerai).
 - Commerce: banque (4:1), ports (3:1 générique, 2:1 spécifique), commerce J↔J (1v1) avec acceptation explicite.
-- Cartes de développement: pioche aléatoire, délai d’usage (pas le tour d’achat), effets normés.
+- Cartes de développement: pioche aléatoire, délai d’usage (pas le tour d’achat), effets normés (Chevalier, progrès), cartes Points de victoire comptées immédiatement mais cachées aux adversaires.
 - Titres: Plus longue route / Plus grande armée, attribution et retrait dynamiques.
 - Victoire: 15 points de victoire.
 
@@ -19,7 +19,7 @@
 ## Invariants (techniques et règles)
 - Comptages plateau: 19 tuiles, 54 intersections (sommets), ~72 arêtes (référence Catane standard).
 - Un seul désert, aucun numéro sur le désert, voleur démarre sur le désert.
-- Contrats de coûts immuables durant une partie; inventaire banque fini (quantités standard de cartes dev/ressources).
+- Contrats de coûts immuables durant une partie; inventaire banque fini (quantités standard de cartes dev/ressources); points de victoire cachés tracés séparément pour préserver l’information privée.
 - Actions légales toujours validées par le moteur; impossibilité de produire un état invalide via l’API publique.
 - RNG seedable et sérialisable; tout état doit être sérialisable/cloneable.
 - Pas d’auto‑échange implicite: tout transfert passe par une action explicite validée.
@@ -43,4 +43,3 @@
 - Vue d’ensemble: `docs/overview.md`
 - Architecture (à rédiger): `docs/architecture.md`
 - Schémas de données (à rédiger): `docs/schemas.md`
-

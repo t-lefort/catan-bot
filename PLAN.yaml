@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-18T00:05:00Z
+last_updated: 2025-10-18T01:45:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 57
-  pending: 43
+  pending: 41
   in_progress: 0
-  completed: 10
+  completed: 11
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -167,11 +167,14 @@ sections:
           2025-10-18T00:05Z: Implémentation terminée (tests `tests/test_construction.py`, logique ressources et règles adjacence/distance). Tous les tests `pytest` passent.
       - id: ENG-006
         title: Cartes de développement (pioche/jouer)
-        status: pending
+        status: completed
         priority: P1
         dependencies: [ENG-001]
         acceptance_criteria:
           - "Pioche aléatoire, délais de jeu, effets (chevalier, progrès, PV)"
+        notes: |
+          2025-10-18T01:00Z: Reprise du chantier ENG-006 — cadrage des besoins (deck, banque, actions Buy/Play) + plan de travail validé.
+          2025-10-18T01:44Z: Implémentation terminée — deck déterministe, banque de ressources, cartes Knight/Progress jouables (Road Building, Year of Plenty, Monopoly), points de victoire cachés auto-accordés. Couverture tests `tests/test_development_cards.py` (9 cas) + `pytest` complet.
       - id: ENG-007
         title: Commerce banque/ports
         status: pending

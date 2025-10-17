@@ -90,36 +90,70 @@ Nous utilisons des coordonnées cube `(x, y, z)` avec contrainte `x + y + z = 0`
       "player_id": 0,
       "name": "Blue",
       "victory_points": 7,
+      "hidden_victory_points": 1,
       "resources": {"BRICK": 1, "LUMBER": 0, "WOOL": 2, "GRAIN": 3, "ORE": 0},
-      "dev_cards": {"KNIGHT": 1, "PROGRESS": 0, "VP": 0},
-      "structures": {
-        "settlements": [12, 23],
-        "cities": [45],
-        "roads": [5, 18, 19]
+      "dev_cards": {
+        "KNIGHT": 1,
+        "ROAD_BUILDING": 0,
+        "YEAR_OF_PLENTY": 0,
+        "MONOPOLY": 0,
+        "VICTORY_POINT": 0
       },
+      "new_dev_cards": {
+        "KNIGHT": 0,
+        "ROAD_BUILDING": 0,
+        "YEAR_OF_PLENTY": 0,
+        "MONOPOLY": 0,
+        "VICTORY_POINT": 0
+      },
+      "settlements": [12, 23],
+      "cities": [45],
+      "roads": [5, 18, 19],
       "longest_road_len": 3,
       "largest_army_size": 1,
-      "played_dev_cards": {"KNIGHT": 1}
+      "played_dev_cards": {
+        "KNIGHT": 1,
+        "ROAD_BUILDING": 0,
+        "YEAR_OF_PLENTY": 0,
+        "MONOPOLY": 0
+      }
     },
     {
       "player_id": 1,
       "name": "Orange",
       "victory_points": 6,
+      "hidden_victory_points": 2,
       "resources": {"BRICK": 0, "LUMBER": 2, "WOOL": 0, "GRAIN": 1, "ORE": 2},
-      "dev_cards": {"KNIGHT": 0, "PROGRESS": 1, "VP": 1},
-      "structures": {
-        "settlements": [34, 41],
-        "cities": [],
-        "roads": [9, 10]
+      "dev_cards": {
+        "KNIGHT": 0,
+        "ROAD_BUILDING": 1,
+        "YEAR_OF_PLENTY": 0,
+        "MONOPOLY": 0,
+        "VICTORY_POINT": 0
       },
+      "new_dev_cards": {
+        "KNIGHT": 0,
+        "ROAD_BUILDING": 0,
+        "YEAR_OF_PLENTY": 0,
+        "MONOPOLY": 0,
+        "VICTORY_POINT": 1
+      },
+      "settlements": [34, 41],
+      "cities": [],
+      "roads": [9, 10],
       "longest_road_len": 2,
       "largest_army_size": 0,
-      "played_dev_cards": {}
+      "played_dev_cards": {
+        "KNIGHT": 0,
+        "ROAD_BUILDING": 0,
+        "YEAR_OF_PLENTY": 0,
+        "MONOPOLY": 0
+      }
     }
   ],
   "bank": {
     "resources": {"BRICK": 18, "LUMBER": 16, "WOOL": 17, "GRAIN": 15, "ORE": 18},
-    "dev_deck": ["KNIGHT", "VP", "PROGRESS", ...]
+    "dev_deck": ["KNIGHT", "VICTORY_POINT", "ROAD_BUILDING", ...]
   },
   "discard_pile": {"dev_cards": []},
   "log": [
@@ -163,13 +197,19 @@ Nous utilisons des coordonnées cube `(x, y, z)` avec contrainte `x + y + z = 0`
 | `BUY_DEVELOPMENT`      | `{}`                                                              |
 | `PLAY_KNIGHT`          | `{"tile_id": int, "steal_from": PlayerId?}`                       |
 | `PLAY_PROGRESS`        | `{"card": "ROAD_BUILDING"|"YEAR_OF_PLENTY"|"MONOPOLY", ...}`       |
-| `PLAY_VICTORY_POINT`   | `{}`                                                              |
 | `TRADE_BANK`           | `{"give": {"resource": int}, "receive": {"resource": int}}`       |
 | `TRADE_PORT`           | `{"port_id": int, "give": {...}, "receive": {...}}`               |
 | `TRADE_PLAYER`         | `{"partner": PlayerId, "offer": {...}, "request": {...}}`         |
 | `END_TURN`             | `{}`                                                              |
 | `SETUP_PLACE_SETTLEMENT` | `{"vertex_id": int, "turn": 1|2}`                               |
 | `SETUP_PLACE_ROAD`     | `{"edge_id": int, "turn": 1|2}`                                   |
+
+Pour `PLAY_PROGRESS`, le contenu du payload dépend de la carte:
+- `ROAD_BUILDING`: `{"card": "...", "edges": [edge_id1, edge_id2]}` — deux routes gratuites adjointes au réseau du joueur.
+- `YEAR_OF_PLENTY`: `{"card": "...", "resources": {"WOOL": 1, "ORE": 1}}` — deux ressources prélevées sur la banque.
+- `MONOPOLY`: `{"card": "...", "resource": "GRAIN"}` — collecte toutes les ressources ciblées chez l’adversaire.
+
+Les cartes `VICTORY_POINT` n'ont pas d'action dédiée: elles sont comptabilisées automatiquement dans `hidden_victory_points` au moment de l'achat.
 
 ### ObservationTensor (RL)
 

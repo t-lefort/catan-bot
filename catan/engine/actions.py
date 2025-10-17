@@ -6,7 +6,7 @@ Définit les actions possibles conformément aux schémas (docs/schemas.md).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, List, Optional
 
 
 @dataclass(frozen=True)
@@ -95,6 +95,30 @@ class EndTurn(Action):
     pass
 
 
+@dataclass(frozen=True)
+class BuyDevelopment(Action):
+    """Achète une carte de développement."""
+
+    pass
+
+
+@dataclass(frozen=True)
+class PlayKnight(Action):
+    """Joue une carte Chevalier."""
+
+    pass
+
+
+@dataclass(frozen=True)
+class PlayProgress(Action):
+    """Joue une carte de progrès (Road Building, Year of Plenty, Monopoly)."""
+
+    card: str
+    resources: Optional[Dict[str, int]] = None
+    edges: Optional[List[int]] = None
+    resource: Optional[str] = None
+
+
 __all__ = [
     "Action",
     "PlaceSettlement",
@@ -104,4 +128,7 @@ __all__ = [
     "MoveRobber",
     "DiscardResources",
     "EndTurn",
+    "BuyDevelopment",
+    "PlayKnight",
+    "PlayProgress",
 ]
