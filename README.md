@@ -35,6 +35,25 @@ Aucun code applicatif n’est encore ajouté volontairement. L’objectif est de
 - Vue d’ensemble: `docs/overview.md`
 - Règles et invariants: `docs/specs.md`
 
+## Installation et environnement virtuel
+
+Pour garantir un environnement de développement reproductible :
+
+```bash
+# Créer l'environnement virtuel (une seule fois)
+python3 -m venv venv
+
+# Activer l'environnement virtuel
+# Sur macOS/Linux :
+source venv/bin/activate
+# Sur Windows :
+venv\Scripts\activate
+
+# Installer les dépendances
+pip install -r requirements.txt
+```
+
 ## Tests (contrats, avant moteur)
-- Installer pytest: `pip install pytest`
+- Activer le venv: `source venv/bin/activate`
 - Lancer: `pytest -q`
+- Avec couverture: `pytest --cov=catan tests/`
