@@ -1,0 +1,503 @@
+# PLAN.yaml — Plan d'action persistant
+#
+# Objectif: conserver un plan détaillé (potentiellement long) et son état,
+# afin de reprendre exactement où on en est, même en changeant de session.
+#
+# Conventions:
+# - Statuts autorisés: pending | in_progress | completed | blocked
+# - Une seule tâche peut être in_progress à la fois (voir in_progress_task).
+# - Utiliser des IDs stables (ex: DOC-001, DEV-012) pour les dépendances.
+# - Mettre à jour last_updated à chaque modification significative.
+#
+version: 1
+plan_name: "CatanBot 1v1 — Plan complet"
+last_updated: 2025-10-17T21:40:00Z
+owner: "Thomas + Agent"
+
+status_summary:
+  total: 57
+  pending: 57
+  in_progress: 0
+  completed: 0
+  blocked: 0
+
+# ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
+in_progress_task: null
+
+sections:
+  - id: DOC
+    title: Documentation
+    description: "Rédiger et valider la documentation (1v1: 15 VP, défausse >9)"
+    tasks:
+      - id: DOC-001
+        title: Overview + variante 1v1
+        status: pending
+        priority: P0
+        dependencies: []
+        acceptance_criteria:
+          - "Objectifs, périmètre 1v1 (15 VP, défausse >9) décrits"
+          - "Règles inchangées listées (ports, chevaliers, routes, etc.)"
+        tests:
+          - "N/A (doc)"
+      - id: DOC-002
+        title: Checklist des règles et invariants
+        status: pending
+        priority: P0
+        dependencies: []
+        acceptance_criteria:
+          - "Checklist couvrant toutes les règles du jeu"
+          - "Invariants formalisés (ex: coûts, limites, conditions de vol/défausse)"
+      - id: DOC-003
+        title: UX GUI (flux et écrans)
+        status: pending
+        priority: P1
+        dependencies: [DOC-001]
+        acceptance_criteria:
+          - "Flux complet d'une partie H2H (setup -> fin)"
+          - "Actions GUI mappées aux règles"
+      - id: DOC-004
+        title: Objectifs RL + métriques
+        status: pending
+        priority: P1
+        dependencies: [DOC-001]
+        acceptance_criteria:
+          - "KPIs: winrate vs baseline, ELO, points/100 tours"
+          - "Cibles de perf simulation (jeux/s)"
+      - id: DOC-005
+        title: Architecture (engine, sim, GUI, RL)
+        status: pending
+        priority: P1
+        dependencies: [DOC-001, DOC-002]
+        acceptance_criteria:
+          - "Diagrammes modules et dépendances"
+          - "Points d'extension (bot/GUI/sim)"
+      - id: DOC-006
+        title: Schémas de donnée (state/action/serialization)
+        status: pending
+        priority: P1
+        dependencies: [DOC-005]
+        acceptance_criteria:
+          - "Format sérialisable pour engine et sim rapide"
+          - "Stable IDs pour actions et entités"
+
+      - id: DOC-007
+        title: Étude catanatron + mapping de réutilisation
+        status: pending
+        priority: P0
+        dependencies: [DOC-001, DOC-002]
+        acceptance_criteria:
+          - "Analyse des modules clés (board, rules, actions) du repo bcollazo/catanatron"
+          - "Décisions: réutiliser/adapter vs réécrire, avec justification"
+          - "Compatibilité de licence et modalités d'intégration documentées"
+
+  - id: ENG
+    title: Moteur de jeu
+    description: "Implémentation des règles complètes (1v1: 15 VP, défausse >9)"
+    tasks:
+      - id: ENG-001
+        title: Types de base et plateau
+        status: pending
+        priority: P0
+        dependencies: [DOC-002, DOC-006]
+        acceptance_criteria:
+          - "Représentation hex, numéros de dés, ports, cases"
+          - "Positions sommet/arête indexées"
+          - "S'inspirer des représentations/indexations de catanatron si pertinent"
+      - id: ENG-002
+        title: Phase de setup (placements initiaux)
+        status: pending
+        priority: P0
+        dependencies: [ENG-001]
+        acceptance_criteria:
+          - "Deux tours de placement, ordre serpent"
+          - "Distribution de ressources après second placement"
+      - id: ENG-003
+        title: Lancer de dés et distribution
+        status: pending
+        priority: P0
+        dependencies: [ENG-001]
+        acceptance_criteria:
+          - "Distribution correcte selon numéros et blocage par voleur"
+          - "2 et 12 inclus, 7 déclenche voleur"
+      - id: ENG-004
+        title: Voleur + défausse >9 + vol
+        status: pending
+        priority: P0
+        dependencies: [ENG-003]
+        acceptance_criteria:
+          - "Défausse si main > 9, plafond 9"
+          - "Déplacement voleur, choix case, vol valide"
+      - id: ENG-005
+        title: Construction (routes, colonies, villes)
+        status: pending
+        priority: P0
+        dependencies: [ENG-001]
+        acceptance_criteria:
+          - "Coûts respectés, règles d'adjacence, distance d'une colonie"
+      - id: ENG-006
+        title: Cartes de développement (pioche/jouer)
+        status: pending
+        priority: P1
+        dependencies: [ENG-001]
+        acceptance_criteria:
+          - "Pioche aléatoire, délais de jeu, effets (chevalier, progrès, PV)"
+      - id: ENG-007
+        title: Commerce banque/ports
+        status: pending
+        priority: P1
+        dependencies: [ENG-001]
+        acceptance_criteria:
+          - "Taux 4:1 banque, 3:1 générique, 2:1 ressource"
+      - id: ENG-008
+        title: Commerce joueur-joueur (1v1)
+        status: pending
+        priority: P2
+        dependencies: [ENG-001]
+        acceptance_criteria:
+          - "Offre/demande, acceptation, transferts"
+      - id: ENG-009
+        title: Plus longue route / Plus grande armée
+        status: pending
+        priority: P1
+        dependencies: [ENG-005, ENG-006]
+        acceptance_criteria:
+          - "Calculs corrects, gestion des changements"
+          - "Algorithme de plus longue route validé vs implémentation catanatron"
+      - id: ENG-010
+        title: Conditions de victoire (15 VP)
+        status: pending
+        priority: P0
+        dependencies: [ENG-005, ENG-006, ENG-009]
+        acceptance_criteria:
+          - "Victoire déclenchée à 15 VP"
+      - id: ENG-011
+        title: Générateur de coups légaux + validateur
+        status: pending
+        priority: P0
+        dependencies: [ENG-002, ENG-003, ENG-004, ENG-005, ENG-006, ENG-007, ENG-008]
+        acceptance_criteria:
+          - "Enumération exhaustive et validation des actions"
+          - "Comparaison de la couverture avec catanatron (si disponible)"
+      - id: ENG-012
+        title: Sérialisation état + RNG reproductible
+        status: pending
+        priority: P0
+        dependencies: [DOC-006]
+        acceptance_criteria:
+          - "Sauvegarde/chargement état, seed unique et clonage"
+
+  - id: GUI
+    title: Interface graphique (H2H)
+    description: "Jouabilité complète 2 humains sur une partie"
+    tasks:
+      - id: GUI-001
+        title: Choix toolkit (Tkinter/PyQt) + thème
+        status: pending
+        priority: P1
+        dependencies: [DOC-003]
+        acceptance_criteria:
+          - "Toolkit validé, critères portabilité/perf"
+      - id: GUI-002
+        title: Rendu du plateau et pièces
+        status: pending
+        priority: P1
+        dependencies: [ENG-001]
+        acceptance_criteria:
+          - "Hex, numéros, ports, routes/colonies/villes"
+      - id: GUI-003
+        title: Setup initial (placements)
+        status: pending
+        priority: P1
+        dependencies: [ENG-002]
+        acceptance_criteria:
+          - "Saisie guidée ordre serpent + distribution"
+      - id: GUI-004
+        title: Tour de jeu (lancer, voleur, voler)
+        status: pending
+        priority: P1
+        dependencies: [ENG-003, ENG-004]
+        acceptance_criteria:
+          - "Flows complets pour 7 et hors 7"
+      - id: GUI-005
+        title: Commerce (banque/ports, 1v1 trade)
+        status: pending
+        priority: P2
+        dependencies: [ENG-007, ENG-008]
+        acceptance_criteria:
+          - "UI claire pour offres et confirmations"
+      - id: GUI-006
+        title: Construction et achats
+        status: pending
+        priority: P1
+        dependencies: [ENG-005, ENG-006]
+        acceptance_criteria:
+          - "Coûts/validations en temps réel"
+      - id: GUI-007
+        title: Cartes de dev (acheter/jouer)
+        status: pending
+        priority: P2
+        dependencies: [ENG-006]
+        acceptance_criteria:
+          - "Restriction de jeu le tour suivant"
+      - id: GUI-008
+        title: HUD mains, défausse, scores, titres
+        status: pending
+        priority: P1
+        dependencies: [ENG-004, ENG-009, ENG-010]
+        acceptance_criteria:
+          - "Indicateurs en synchro + prompts défausse"
+      - id: GUI-009
+        title: Journal d’actions + undo limité
+        status: pending
+        priority: P3
+        dependencies: [ENG-012]
+        acceptance_criteria:
+          - "Historique consultable, undo si validé"
+      - id: GUI-010
+        title: Sauvegarde/chargement partie
+        status: pending
+        priority: P2
+        dependencies: [ENG-012]
+        acceptance_criteria:
+          - "Fichiers de sauvegarde stables"
+
+  - id: SIM
+    title: Simulation rapide (headless)
+    description: "Auto-play, parallélisation, métriques"
+    tasks:
+      - id: SIM-001
+        title: Core headless compatible engine
+        status: pending
+        priority: P0
+        dependencies: [ENG-011, ENG-012]
+        acceptance_criteria:
+          - "API step() et reset(), masques d’actions"
+          - "API compatible/inspirée de catanatron pour faciliter réutilisation"
+      - id: SIM-002
+        title: Génération et clonage déterministes
+        status: pending
+        priority: P0
+        dependencies: [SIM-001]
+        acceptance_criteria:
+          - "Rejeu exact avec seed identique"
+      - id: SIM-003
+        title: Parallélisation rollouts
+        status: pending
+        priority: P1
+        dependencies: [SIM-001]
+        acceptance_criteria:
+          - "N workers indépendants, agrégation métriques"
+      - id: SIM-004
+        title: KPIs et traces compactes
+        status: pending
+        priority: P1
+        dependencies: [SIM-003]
+        acceptance_criteria:
+          - "Temps/épisode, coups/épisode, taux de victoire"
+      - id: SIM-005
+        title: Harnais d’évaluation (tournois)
+        status: pending
+        priority: P2
+        dependencies: [SIM-003]
+        acceptance_criteria:
+          - "Round-robin vs baseline + seed control"
+
+  - id: RL
+    title: RL self-play
+    description: "Observation, actions masquées, entraînement et évaluation"
+    tasks:
+      - id: RL-001
+        title: Encodage observation (état -> tenseurs)
+        status: pending
+        priority: P0
+        dependencies: [DOC-006, SIM-001]
+        acceptance_criteria:
+          - "Taille fixe, normalisation, invariances (rotations si utile)"
+          - "S'inspirer du schéma d'état de catanatron si applicable"
+      - id: RL-002
+        title: Espace d’actions + masquage
+        status: pending
+        priority: P0
+        dependencies: [ENG-011, SIM-001]
+        acceptance_criteria:
+          - "Masques valides pour toutes phases"
+          - "Alignement possible avec l'encodage d'actions de catanatron"
+      - id: RL-003
+        title: Politiques de base (aléatoire/heuristique)
+        status: pending
+        priority: P0
+        dependencies: [SIM-001]
+        acceptance_criteria:
+          - "Baselines plug‑and‑play pour éval"
+      - id: RL-004
+        title: Cadre self-play + buffer
+        status: pending
+        priority: P1
+        dependencies: [SIM-003, RL-003]
+        acceptance_criteria:
+          - "Collecte transitions avec adversaires courants"
+      - id: RL-005
+        title: Réseau de politique/valeur
+        status: pending
+        priority: P1
+        dependencies: [RL-001]
+        acceptance_criteria:
+          - "Architecture initiale définie (PyTorch)"
+      - id: RL-006
+        title: Entraînement (PPO/A2C) avec masques
+        status: pending
+        priority: P1
+        dependencies: [RL-002, RL-005]
+        acceptance_criteria:
+          - "Stabilité d’entraînement et pertes décroissantes"
+      - id: RL-007
+        title: Évaluation périodique vs baseline
+        status: pending
+        priority: P1
+        dependencies: [RL-003, RL-006]
+        acceptance_criteria:
+          - "Courbes winrate/ELO au fil des itérations"
+      - id: RL-008
+        title: Auto‑play miroir et ligue simple
+        status: pending
+        priority: P2
+        dependencies: [RL-004]
+        acceptance_criteria:
+          - "Sélection adversaires: latest, best‑so‑far"
+      - id: RL-009
+        title: Export/chargement checkpoints
+        status: pending
+        priority: P2
+        dependencies: [RL-006]
+        acceptance_criteria:
+          - "Reprise d’entraînement + évaluation offline"
+      - id: RL-010
+        title: Tableau de bord live (progression)
+        status: pending
+        priority: P1
+        dependencies: [SIM-004, RL-007]
+        acceptance_criteria:
+          - "Graphiques taux de victoire, points moyens, longueur parties"
+
+  - id: PERF
+    title: Performance
+    description: "Profilage et optimisations pour simulations rapides"
+    tasks:
+      - id: PERF-001
+        title: Profilage engine et sim
+        status: pending
+        priority: P1
+        dependencies: [ENG-011, SIM-001]
+        acceptance_criteria:
+          - "Hotspots identifiés avec traces"
+      - id: PERF-002
+        title: Réduction overhead Python
+        status: pending
+        priority: P2
+        dependencies: [PERF-001]
+        acceptance_criteria:
+          - "Objets compacts, allocations réduites"
+      - id: PERF-003
+        title: Caching et structures compactes
+        status: pending
+        priority: P2
+        dependencies: [PERF-001]
+        acceptance_criteria:
+          - "Moins de recomputations par coup"
+      - id: PERF-004
+        title: Vectorisation / parallélisation
+        status: pending
+        priority: P2
+        dependencies: [SIM-003]
+        acceptance_criteria:
+          - "Jeux/s atteint la cible définie"
+
+  - id: TOOL
+    title: Tooling & CI
+    description: "Packaging, qualité, CI"
+    tasks:
+      - id: TOOL-001
+        title: Structure projet + packaging
+        status: pending
+        priority: P1
+        dependencies: []
+        acceptance_criteria:
+          - "Arborescence stable, modules clairs"
+      - id: TOOL-002
+        title: CI (tests, lint)
+        status: pending
+        priority: P2
+        dependencies: [TEST-001]
+        acceptance_criteria:
+          - "Tests auto et badges de statut"
+      - id: TOOL-003
+        title: Scripts Makefile/CLI
+        status: pending
+        priority: P2
+        dependencies: [TOOL-001]
+        acceptance_criteria:
+          - "Cibles standard (test, run, train)"
+
+  - id: TEST
+    title: Tests
+    description: "Tests‑first: unitaires, intégration, propriétés"
+    tasks:
+      - id: TEST-001
+        title: Unitaires moteur (types, coûts, placements)
+        status: pending
+        priority: P0
+        dependencies: [ENG-001, ENG-005]
+        acceptance_criteria:
+          - "Couverture de base > 70% côté moteur"
+      - id: TEST-002
+        title: Propriétés (Hypothesis) distribution et invariants
+        status: pending
+        priority: P1
+        dependencies: [ENG-003, ENG-004]
+        acceptance_criteria:
+          - "Distribution correcte, pas d'états invalides"
+      - id: TEST-003
+        title: Intégration partie complète (H2H)
+        status: pending
+        priority: P1
+        dependencies: [ENG-011, GUI-004]
+        acceptance_criteria:
+          - "Scénario du début à la victoire"
+          - "Cas de référence croisés avec scénarios catanatron (si disponibles)"
+      - id: TEST-004
+        title: Déterminisme (seed)
+        status: pending
+        priority: P1
+        dependencies: [ENG-012, SIM-002]
+        acceptance_criteria:
+          - "Reproduit les mêmes traces avec la même seed"
+      - id: TEST-005
+        title: Smoke GUI
+        status: pending
+        priority: P2
+        dependencies: [GUI-002]
+        acceptance_criteria:
+          - "Lancement UI sans crash, interactions basiques"
+      - id: TEST-006
+        title: Bench perf (jeux/s)
+        status: pending
+        priority: P1
+        dependencies: [SIM-003, PERF-001]
+        acceptance_criteria:
+          - "Seuil minimal atteint (à définir)"
+
+# Exemple de tâche (à copier puis adapter, ou à supprimer une fois le vrai plan rédigé):
+#
+#  - id: DOC-001
+#    title: Ecrire l'overview du projet
+#    status: pending
+#    priority: P1
+#    tags: [docs, overview]
+#    estimate: "2h"
+#    dependencies: []
+#    acceptance_criteria:
+#      - "docs/overview.md existe avec objectifs, périmètre, stakeholders"
+#      - "Contraintes et invariants listés"
+#    tests:
+#      - "N/A (documentation)"
+#    notes: "Point d'entrée pour tous les contributeurs"
