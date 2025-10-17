@@ -30,3 +30,11 @@ Aucun code applicatif n’est encore ajouté volontairement. L’objectif est de
 - Définir un plan de travail découpé en étapes vérifiables.
 - Écrire les tests avant le code selon le plan validé.
 - Implémenter ensuite le minimum pour faire passer les tests.
+
+## Docs
+- Vue d’ensemble: `docs/overview.md`
+- Règles et invariants: `docs/specs.md`
+
+## Tests (contrats, avant moteur)
+- Installer pytest: `pip install pytest`
+- Lancer: `pytest -q`

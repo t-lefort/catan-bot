@@ -11,18 +11,18 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-17T21:40:00Z
+last_updated: 2025-10-17T22:10:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 57
-  pending: 57
-  in_progress: 0
-  completed: 0
+  pending: 54
+  in_progress: 1
+  completed: 2
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
-in_progress_task: null
+in_progress_task: TEST-001
 
 sections:
   - id: DOC
@@ -31,7 +31,7 @@ sections:
     tasks:
       - id: DOC-001
         title: Overview + variante 1v1
-        status: pending
+        status: completed
         priority: P0
         dependencies: []
         acceptance_criteria:
@@ -41,7 +41,7 @@ sections:
           - "N/A (doc)"
       - id: DOC-002
         title: Checklist des règles et invariants
-        status: pending
+        status: completed
         priority: P0
         dependencies: []
         acceptance_criteria:
@@ -444,7 +444,7 @@ sections:
     tasks:
       - id: TEST-001
         title: Unitaires moteur (types, coûts, placements)
-        status: pending
+        status: in_progress
         priority: P0
         dependencies: [ENG-001, ENG-005]
         acceptance_criteria:
