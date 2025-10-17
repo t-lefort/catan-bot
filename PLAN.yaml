@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-17T20:44:15Z
+last_updated: 2025-10-17T21:08:06Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 57
-  pending: 51
+  pending: 49
   in_progress: 0
-  completed: 5
+  completed: 6
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -103,13 +103,16 @@ sections:
     tasks:
       - id: ENG-001
         title: Types de base et plateau
-        status: pending
+        status: completed
         priority: P0
         dependencies: [DOC-002, DOC-006]
         acceptance_criteria:
           - "Représentation hex, numéros de dés, ports, cases"
           - "Positions sommet/arête indexées"
           - "S'inspirer des représentations/indexations de catanatron si pertinent"
+        notes: |
+          2025-10-17T20:55Z: Session en cours — objectifs: structure complète du plateau, mapping sommets/arêtes, ports.
+          2025-10-17T21:08Z: Plateau standard implémenté (sommets/arêtes indexés, ports, numéros de dés) + tests contractuels verts.
       - id: ENG-002
         title: Phase de setup (placements initiaux)
         status: pending
