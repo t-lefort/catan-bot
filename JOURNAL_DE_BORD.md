@@ -58,4 +58,4 @@ Il a généré un plan super détaillé, facile à relire et que me semble très
 Je vais lui demander de commencer à faire la doc et faire les tests avant de créer le moteur de jeu. Je lui donne le PLAN.yaml, le AGENTS.md et les README en context plutôt que d'utiliser le contexte automatique. Je reset régulièrement le context et lui dis "Continue le projet selon le plan". J'essaye de passer sur gpt-5-codex-high pour l'execution du plan
 
 ## Etape 13
-La méthode a l'air de bien fonctionner avec ChatGPT, je vais faire une passe avec Claude Code pour voir comment il s'en sort. Si ça marche bien, ça serait bien de pouvoir les faire bosser en parallèle, il y a des outils pour ça, il faudrait que je test.
+La méthode a l'air de bien fonctionner avec ChatGPT, je vais faire une passe avec Claude Code pour voir comment il s'en sort. Si ça marche bien, ça serait bien de pouvoir les faire bosser en parallèle, il y a des outils pour ça, il faudrait que je test. Claude est plus rapide mais il ne me donne pas l'impression de bien faire les chose dans l'ordre. Il crée bien les tests avant de dev la fonctionnalité mais je ne pense pas que c'est ce qu'aurait fait ChatGPT. 

@@ -60,6 +60,9 @@ class GameState:
     _setup_settlements_placed: int = 0
     _setup_roads_placed: int = 0
     _waiting_for_road: bool = False  # True si colonie placée, en attente de route
+    # État du lancer de dés
+    last_dice_roll: int | None = None
+    dice_rolled_this_turn: bool = False
 
     @classmethod
     def new_1v1_game(cls, player_names: List[str] | None = None) -> "GameState":
@@ -98,7 +101,7 @@ class GameState:
         Returns:
             True si l'action est légale
         """
-        from catan.engine.actions import PlaceRoad, PlaceSettlement
+        from catan.engine.actions import PlaceRoad, PlaceSettlement, RollDice
 
         # Pendant setup, les règles sont spécifiques
         if self.phase in (SetupPhase.SETUP_ROUND_1, SetupPhase.SETUP_ROUND_2):
@@ -133,7 +136,16 @@ class GameState:
                 edge = self.board.edges[edge_id]
                 return last_settlement in edge.vertices
 
-        # TODO: règles pour phase PLAY
+            # Pas de lancer de dés pendant setup
+            return False
+
+        # Phase PLAY
+        if self.phase == SetupPhase.PLAY:
+            if isinstance(action, RollDice):
+                # Le lancer de dés n'est légal qu'au début du tour
+                return not self.dice_rolled_this_turn
+
+        # TODO: autres règles pour phase PLAY
         return False
 
     def apply_action(self, action: "Action") -> "GameState":  # type: ignore
@@ -148,7 +160,8 @@ class GameState:
         Raises:
             ValueError: Si l'action n'est pas légale
         """
-        from catan.engine.actions import PlaceRoad, PlaceSettlement
+        from catan.engine.actions import PlaceRoad, PlaceSettlement, RollDice
+        import random
 
         if not self.is_action_legal(action):
             raise ValueError(f"Action illégale: {action}")
@@ -166,6 +179,8 @@ class GameState:
             "_setup_settlements_placed": self._setup_settlements_placed,
             "_setup_roads_placed": self._setup_roads_placed,
             "_waiting_for_road": self._waiting_for_road,
+            "last_dice_roll": self.last_dice_roll,
+            "dice_rolled_this_turn": self.dice_rolled_this_turn,
         }
 
         if isinstance(action, PlaceSettlement):
@@ -195,7 +210,53 @@ class GameState:
             # Avancer le jeu après placement de la route
             new_state_fields.update(self._advance_setup_turn())
 
+        elif isinstance(action, RollDice):
+            # Lancer les dés
+            if action.forced_value is not None:
+                die1, die2 = action.forced_value
+            else:
+                die1 = random.randint(1, 6)
+                die2 = random.randint(1, 6)
+
+            dice_total = die1 + die2
+            new_state_fields["last_dice_roll"] = dice_total
+            new_state_fields["dice_rolled_this_turn"] = True
+
+            # Si c'est un 7, pas de distribution (voleur)
+            if dice_total != 7:
+                # Distribuer les ressources
+                self._distribute_resources(dice_total, new_players)
+
         return GameState(**new_state_fields)
+
+    def _distribute_resources(self, dice_value: int, players: List[Player]) -> None:
+        """Distribue les ressources selon le lancer de dés.
+
+        Args:
+            dice_value: Valeur du lancer de dés
+            players: Liste modifiable des joueurs (pour mutation)
+        """
+        # Parcourir toutes les tuiles du plateau
+        for tile_id, tile in self.board.tiles.items():
+            # Ignorer si pas de numéro (pip) ou désert
+            if tile.pip is None or tile.resource == "DESERT":
+                continue
+
+            # Ignorer si le numéro ne correspond pas
+            if tile.pip != dice_value:
+                continue
+
+            # TODO: ignorer si le voleur est sur cette tuile (ENG-004)
+
+            # Distribuer aux colonies/villes sur les sommets adjacents
+            for vertex_id in tile.vertices:
+                for player in players:
+                    # Colonie = 1 ressource
+                    if vertex_id in player.settlements:
+                        player.resources[tile.resource] += 1
+                    # Ville = 2 ressources
+                    elif vertex_id in player.cities:
+                        player.resources[tile.resource] += 2
 
     def _advance_setup_turn(self) -> dict:
         """Calcule le prochain état après un placement complet (colonie + route).

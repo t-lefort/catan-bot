@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-17T23:30:00Z
+last_updated: 2025-10-17T23:45:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 57
-  pending: 48
+  pending: 47
   in_progress: 0
-  completed: 7
+  completed: 8
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -130,12 +130,20 @@ sections:
           - Tous les tests passent (20/20 au total)
       - id: ENG-003
         title: Lancer de dés et distribution
-        status: pending
+        status: completed
         priority: P0
         dependencies: [ENG-001]
         acceptance_criteria:
           - "Distribution correcte selon numéros et blocage par voleur"
           - "2 et 12 inclus, 7 déclenche voleur"
+        notes: |
+          2025-10-17T23:45Z: Implémentation complétée
+          - Tests écrits en premier (test_dice_and_distribution.py): 13 tests couvrant lancer, distribution, 7
+          - Action RollDice: support forced_value pour tests, génération aléatoire 2-12
+          - Distribution: parcours tuiles, vérification pip, colonies=1 ressource, villes=2 ressources
+          - Gestion du 7: aucune distribution (phase voleur sera dans ENG-004)
+          - État enrichi: last_dice_roll, dice_rolled_this_turn
+          - Tous les tests passent (33/33 au total incluant tests précédents)
       - id: ENG-004
         title: Voleur + défausse >9 + vol
         status: pending
