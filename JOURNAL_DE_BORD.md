@@ -55,4 +55,4 @@ J'essaye une nouvelles approche. D'abord je lui demande de préparer un projet a
 Il a généré un plan super détaillé, facile à relire et que me semble très cohérent. Il y a juste les tests qui sont à la fin donc j'espère qu'il ne va pas le réaliser de haut en bas, il semble avoir mis un système de priorité, à voir si c'est bien géré.
 
 ## Etape 12
-Je vais lui demander de commencer à faire la doc et faire les tests avant de créer le moteur de jeu. Je lui donne le PLAN.yaml, le AGENTS.md et les README en context plutôt que d'utiliser le contexte automatique
+Je vais lui demander de commencer à faire la doc et faire les tests avant de créer le moteur de jeu. Je lui donne le PLAN.yaml, le AGENTS.md et les README en context plutôt que d'utiliser le contexte automatique. Je reset régulièrement le context et lui dis "Continue le projet selon le plan". J'essaye de passer sur gpt-5-codex-high pour l'execution du plan
