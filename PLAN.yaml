@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-18T06:48:15Z
+last_updated: 2025-10-18T07:05:50Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 57
-  pending: 45
+  pending: 43
   in_progress: 0
-  completed: 12
+  completed: 13
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -187,11 +187,14 @@ sections:
           2025-10-18T06:48Z: Implémentation terminée + tests `pytest` (58) verts — TradeBank gère les taux 4:1, 3:1 (ANY), 2:1 (ports spécifiques).
       - id: ENG-008
         title: Commerce joueur-joueur (1v1)
-        status: pending
+        status: completed
         priority: P2
         dependencies: [ENG-001]
         acceptance_criteria:
           - "Offre/demande, acceptation, transferts"
+        notes: |
+          2025-10-18T07:00Z: Démarrage — rédaction tests TDD pour échanges joueur↔joueur.
+          2025-10-18T07:05Z: Terminé — actions Offer/Accept/Decline, état pending_player_trade, tests pytest (63) verts.
       - id: ENG-009
         title: Plus longue route / Plus grande armée
         status: pending

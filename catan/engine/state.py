@@ -67,6 +67,16 @@ class Player:
     hidden_victory_points: int = 0
 
 
+@dataclass(frozen=True)
+class PendingPlayerTrade:
+    """Échange joueur↔joueur en attente de réponse."""
+
+    proposer_id: int
+    responder_id: int
+    give: Dict[str, int]
+    receive: Dict[str, int]
+
+
 class SetupPhase(Enum):
     """Phases de setup."""
 
@@ -81,6 +91,7 @@ class TurnSubPhase(Enum):
     MAIN = "MAIN"
     ROBBER_DISCARD = "ROBBER_DISCARD"
     ROBBER_MOVE = "ROBBER_MOVE"
+    TRADE_RESPONSE = "TRADE_RESPONSE"
 
 
 @dataclass
@@ -105,6 +116,7 @@ class GameState:
     turn_subphase: "TurnSubPhase" = TurnSubPhase.MAIN
     pending_discards: Dict[int, int] = field(default_factory=dict)
     pending_discard_queue: List[int] = field(default_factory=list)
+    pending_player_trade: PendingPlayerTrade | None = None
     robber_tile_id: int = 0
     robber_roller_id: int | None = None
     dev_deck: List[str] = field(default_factory=list)
@@ -179,10 +191,13 @@ class GameState:
             True si l'action est légale
         """
         from catan.engine.actions import (
+            AcceptPlayerTrade,
             BuyDevelopment,
             BuildCity,
+            DeclinePlayerTrade,
             DiscardResources,
             MoveRobber,
+            OfferPlayerTrade,
             PlaceRoad,
             PlaceSettlement,
             PlayKnight,
@@ -269,11 +284,53 @@ class GameState:
                 return False
             return self._player_has_resources(action.steal_from)
 
+        if self.turn_subphase == TurnSubPhase.TRADE_RESPONSE:
+            pending = self.pending_player_trade
+            if pending is None:
+                return False
+            if self.current_player_id != pending.responder_id:
+                return False
+            if isinstance(action, AcceptPlayerTrade):
+                proposer = self.players[pending.proposer_id]
+                responder = self.players[pending.responder_id]
+                if not self._player_can_afford(proposer, pending.give):
+                    return False
+                if not self._player_can_afford(responder, pending.receive):
+                    return False
+                return True
+            if isinstance(action, DeclinePlayerTrade):
+                return True
+            return False
+
         # Sous-phase principale: gérer les actions de construction
         if isinstance(action, RollDice):
             return not self.dice_rolled_this_turn
 
         current_player = self.players[self.current_player_id]
+
+        if isinstance(action, OfferPlayerTrade):
+            if self.turn_subphase != TurnSubPhase.MAIN:
+                return False
+            if not self.dice_rolled_this_turn:
+                return False
+            if self.pending_player_trade is not None:
+                return False
+            if not action.give or not action.receive:
+                return False
+            if any(amount <= 0 for amount in action.give.values()):
+                return False
+            if any(amount <= 0 for amount in action.receive.values()):
+                return False
+            if any(resource not in RESOURCE_TYPES for resource in action.give):
+                return False
+            if any(resource not in RESOURCE_TYPES for resource in action.receive):
+                return False
+            if not self._player_can_afford(current_player, action.give):
+                return False
+            opponent_id = self._opponent_id(self.current_player_id)
+            if opponent_id is None:
+                return False
+            return True
 
         if isinstance(action, BuyDevelopment):
             if self.turn_subphase != TurnSubPhase.MAIN:
@@ -425,10 +482,13 @@ class GameState:
             ValueError: Si l'action n'est pas légale
         """
         from catan.engine.actions import (
+            AcceptPlayerTrade,
             BuyDevelopment,
             BuildCity,
+            DeclinePlayerTrade,
             DiscardResources,
             MoveRobber,
+            OfferPlayerTrade,
             PlaceRoad,
             PlaceSettlement,
             PlayKnight,
@@ -459,6 +519,7 @@ class GameState:
             "turn_subphase": self.turn_subphase,
             "pending_discards": copy.deepcopy(self.pending_discards),
             "pending_discard_queue": list(self.pending_discard_queue),
+            "pending_player_trade": self.pending_player_trade,
             "robber_tile_id": self.robber_tile_id,
             "robber_roller_id": self.robber_roller_id,
             "dev_deck": list(self.dev_deck),
@@ -539,6 +600,43 @@ class GameState:
             )
             for resource, amount in action.receive.items():
                 current_player.resources[resource] += amount
+
+        elif isinstance(action, OfferPlayerTrade):
+            opponent_id = self._opponent_id(self.current_player_id)
+            if opponent_id is None:
+                raise ValueError("No opponent available for player trade")
+            new_state_fields["pending_player_trade"] = PendingPlayerTrade(
+                proposer_id=self.current_player_id,
+                responder_id=opponent_id,
+                give=dict(action.give),
+                receive=dict(action.receive),
+            )
+            new_state_fields["turn_subphase"] = TurnSubPhase.TRADE_RESPONSE
+            new_state_fields["current_player_id"] = opponent_id
+
+        elif isinstance(action, AcceptPlayerTrade):
+            pending = self.pending_player_trade
+            if pending is None:
+                raise ValueError("No pending player trade to accept")
+            proposer = new_players[pending.proposer_id]
+            responder = new_players[pending.responder_id]
+
+            self._deduct_resources(proposer, pending.give)
+            self._deduct_resources(responder, pending.receive)
+            self._add_resources_to_player(responder, pending.give)
+            self._add_resources_to_player(proposer, pending.receive)
+
+            new_state_fields["pending_player_trade"] = None
+            new_state_fields["turn_subphase"] = TurnSubPhase.MAIN
+            new_state_fields["current_player_id"] = pending.proposer_id
+
+        elif isinstance(action, DeclinePlayerTrade):
+            pending = self.pending_player_trade
+            if pending is None:
+                raise ValueError("No pending player trade to decline")
+            new_state_fields["pending_player_trade"] = None
+            new_state_fields["turn_subphase"] = TurnSubPhase.MAIN
+            new_state_fields["current_player_id"] = pending.proposer_id
 
         elif isinstance(action, BuyDevelopment):
             if not new_state_fields["dev_deck"]:
@@ -688,6 +786,14 @@ class GameState:
             player.resources[resource] -= amount
 
     @staticmethod
+    def _add_resources_to_player(player: Player, resources: Dict[str, int]) -> None:
+        """Ajoute des ressources à un joueur."""
+        for resource, amount in resources.items():
+            if amount == 0:
+                continue
+            player.resources[resource] += amount
+
+    @staticmethod
     def _add_resources_to_bank(bank: Dict[str, int], resources: Dict[str, int]) -> None:
         """Ajoute des ressources à la banque (ex: achat de carte)."""
         for resource, amount in resources.items():
@@ -798,6 +904,17 @@ class GameState:
             neighbor = b if a == vertex_id else a
             neighbors.append(neighbor)
         return neighbors
+
+    def _opponent_id(self, player_id: int) -> int | None:
+        """Retourne l'identifiant de l'adversaire (1v1)."""
+
+        player_count = len(self.players)
+        if player_count <= 1:
+            return None
+        for candidate in range(player_count):
+            if candidate != player_id:
+                return candidate
+        return None
 
     def _vertex_respects_distance_rule(self, vertex_id: int) -> bool:
         """Applique la règle de distance: aucun voisin ne doit être occupé."""
@@ -922,7 +1039,9 @@ class GameState:
             # Round 2: ordre inverse (1, 0)
             if total_placements < 4:
                 # Passer au joueur précédent (ordre inverse)
-                updates["current_player_id"] = 1 if self.current_player_id == 1 else 0
+                player_count = len(self.players)
+                previous_player = (self.current_player_id - 1) % player_count
+                updates["current_player_id"] = previous_player
             else:
                 # Setup terminé, passer en phase PLAY
                 updates["phase"] = SetupPhase.PLAY
@@ -935,6 +1054,7 @@ class GameState:
 __all__ = [
     "GameState",
     "Player",
+    "PendingPlayerTrade",
     "SetupPhase",
     "TurnSubPhase",
 ]

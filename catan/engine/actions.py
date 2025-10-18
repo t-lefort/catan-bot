@@ -132,6 +132,33 @@ class TradeBank(Action):
     receive: Dict[str, int]
 
 
+@dataclass(frozen=True)
+class OfferPlayerTrade(Action):
+    """Propose un échange joueur↔joueur.
+
+    Args:
+        give: Ressources offertes au répondant.
+        receive: Ressources demandées en retour.
+    """
+
+    give: Dict[str, int]
+    receive: Dict[str, int]
+
+
+@dataclass(frozen=True)
+class AcceptPlayerTrade(Action):
+    """Accepte l'échange joueur↔joueur en cours."""
+
+    pass
+
+
+@dataclass(frozen=True)
+class DeclinePlayerTrade(Action):
+    """Refuse l'échange joueur↔joueur en cours."""
+
+    pass
+
+
 __all__ = [
     "Action",
     "PlaceSettlement",
@@ -145,4 +172,7 @@ __all__ = [
     "PlayKnight",
     "PlayProgress",
     "TradeBank",
+    "OfferPlayerTrade",
+    "AcceptPlayerTrade",
+    "DeclinePlayerTrade",
 ]
