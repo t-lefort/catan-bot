@@ -188,6 +188,7 @@ class GameState:
             PlayKnight,
             PlayProgress,
             RollDice,
+            TradeBank,
         )
 
         # Pendant setup, les règles sont spécifiques
@@ -377,6 +378,38 @@ class GameState:
                 return False
             return True
 
+        if isinstance(action, TradeBank):
+            if self.turn_subphase != TurnSubPhase.MAIN:
+                return False
+            if not self.dice_rolled_this_turn:
+                return False
+            if not action.give or not action.receive:
+                return False
+            if len(action.give) != 1 or len(action.receive) != 1:
+                return False
+
+            give_resource, give_amount = next(iter(action.give.items()))
+            receive_resource, receive_amount = next(iter(action.receive.items()))
+
+            if (
+                give_resource not in RESOURCE_TYPES
+                or receive_resource not in RESOURCE_TYPES
+            ):
+                return False
+            if give_amount <= 0 or receive_amount <= 0:
+                return False
+            if not self._player_can_afford(current_player, action.give):
+                return False
+            if not self._bank_has_resources(action.receive):
+                return False
+
+            rate = self._trade_rate_for_resource(current_player, give_resource)
+            if give_amount % rate != 0:
+                return False
+            if give_amount // rate != receive_amount:
+                return False
+            return True
+
         return False
 
     def apply_action(self, action: "Action") -> "GameState":  # type: ignore
@@ -401,6 +434,7 @@ class GameState:
             PlayKnight,
             PlayProgress,
             RollDice,
+            TradeBank,
         )
         import random
 
@@ -494,6 +528,17 @@ class GameState:
             self._add_resources_to_bank(
                 new_state_fields["bank_resources"], COSTS["city"]
             )
+
+        elif isinstance(action, TradeBank):
+            self._deduct_resources(current_player, action.give)
+            self._add_resources_to_bank(
+                new_state_fields["bank_resources"], action.give
+            )
+            self._remove_resources_from_bank(
+                new_state_fields["bank_resources"], action.receive
+            )
+            for resource, amount in action.receive.items():
+                current_player.resources[resource] += amount
 
         elif isinstance(action, BuyDevelopment):
             if not new_state_fields["dev_deck"]:
@@ -669,6 +714,28 @@ class GameState:
             if self.bank_resources.get(resource, 0) < amount:
                 return False
         return True
+
+    def _player_port_kinds(self, player: Player) -> Set[str]:
+        """Retourne les types de ports accessibles par le joueur."""
+        owned_vertices = set(player.settlements) | set(player.cities)
+        if not owned_vertices:
+            return set()
+
+        kinds: Set[str] = set()
+        for port in self.board.ports:
+            if any(vertex in owned_vertices for vertex in port.vertices):
+                kinds.add(port.kind)
+        return kinds
+
+    def _trade_rate_for_resource(self, player: Player, resource: str) -> int:
+        """Calcule le taux de commerce applicable pour une ressource donnée."""
+        rate = 4
+        port_kinds = self._player_port_kinds(player)
+        if "ANY" in port_kinds:
+            rate = min(rate, 3)
+        if resource in port_kinds:
+            rate = min(rate, 2)
+        return rate
 
     def _grant_new_dev_card(self, player: Player, card: str) -> None:
         """Ajoute une carte de développement fraîchement achetée."""

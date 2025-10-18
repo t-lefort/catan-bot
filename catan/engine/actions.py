@@ -119,6 +119,19 @@ class PlayProgress(Action):
     resource: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class TradeBank(Action):
+    """Échange des ressources avec la banque (ports inclus).
+
+    Args:
+        give: Ressources données à la banque.
+        receive: Ressources reçues de la banque.
+    """
+
+    give: Dict[str, int]
+    receive: Dict[str, int]
+
+
 __all__ = [
     "Action",
     "PlaceSettlement",
@@ -131,4 +144,5 @@ __all__ = [
     "BuyDevelopment",
     "PlayKnight",
     "PlayProgress",
+    "TradeBank",
 ]
