@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-19T23:00:00Z
+last_updated: 2025-10-19T23:30:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 59
-  pending: 29
+  pending: 28
   in_progress: 0
-  completed: 26
+  completed: 27
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -342,11 +342,22 @@ sections:
           - "UI claire pour offres et confirmations"
       - id: GUI-006
         title: Construction et achats
-        status: pending
+        status: completed
         priority: P1
         dependencies: [ENG-005, ENG-006]
         acceptance_criteria:
           - "Coûts/validations en temps réel"
+        notes: |
+          2025-10-19T23:30Z: Implémentation terminée
+          - Module catan.gui.construction_controller créé avec ConstructionController
+          - Gestion construction routes, colonies, villes avec validation coûts temps réel
+          - Gestion achat cartes de développement
+          - Méthodes can_afford_* pour vérifier ressources disponibles
+          - Méthodes get_legal_*_positions pour positions légales construction
+          - Méthodes handle_build_* et handle_buy_development pour actions
+          - Méthode get_costs pour affichage coûts
+          - Tests unitaires (tests/test_gui_construction_controller.py): 17 tests validant toutes les fonctionnalités
+          - Tous les tests passent (150/150 incluant tests existants)
       - id: GUI-007
         title: Cartes de dev (acheter/jouer)
         status: pending
