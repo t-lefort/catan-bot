@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-19T21:01:26Z
+last_updated: 2025-10-19T21:27:26Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 59
-  pending: 25
+  pending: 23
   in_progress: 0
-  completed: 29
+  completed: 31
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -367,18 +367,28 @@ sections:
           - Tous les tests passent (150/150 incluant tests existants)
       - id: GUI-007
         title: Cartes de dev (acheter/jouer)
-        status: pending
+        status: completed
         priority: P2
         dependencies: [ENG-006]
         acceptance_criteria:
           - "Restriction de jeu le tour suivant"
+        notes: |
+          2025-10-19T21:18Z: Ajout `catan.gui.development_controller.DevelopmentController`
+          (gestion PlayKnight + cartes progrès) avec tests GUI headless
+          `tests/test_gui_development_controller.py` (7 cas). Exposition
+          du module dans `catan/gui/__init__.py`.
       - id: GUI-008
         title: HUD mains, défausse, scores, titres
-        status: pending
+        status: completed
         priority: P1
         dependencies: [ENG-004, ENG-009, ENG-010]
         acceptance_criteria:
           - "Indicateurs en synchro + prompts défausse"
+        notes: |
+          2025-10-19T21:27Z: Implémentation `catan.gui.hud_controller.HUDController`
+          + `PlayerPanel` pour exposer ressources/cartes/scores/titres. Tests
+          headless `tests/test_gui_hud_controller.py` (3 cas) validant
+          synchronisation des défausses et mises à jour après discard.
       - id: GUI-009
         title: Journal d’actions + undo limité
         status: pending

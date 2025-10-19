@@ -10,6 +10,8 @@ Modules:
 - turn_controller: contrôleur du tour de jeu (GUI-004)
 - construction_controller: contrôleur construction/achats (GUI-006)
 - trade_controller: contrôleur commerce banque/joueurs (GUI-005)
+- development_controller: contrôleur cartes de développement (GUI-007)
+- hud_controller: contrôleur HUD (GUI-008)
 - components: widgets réutilisables (boutons, overlays) [à venir]
 - app: boucle principale pygame et gestion des évènements [à venir]
 """
@@ -21,4 +23,6 @@ __all__ = [
     "turn_controller",
     "construction_controller",
     "trade_controller",
+    "development_controller",
+    "hud_controller",
 ]
