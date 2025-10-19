@@ -7,11 +7,12 @@ Conforme aux schémas (docs/schemas.md) et specs (docs/specs.md).
 from __future__ import annotations
 
 import copy
+import random
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from itertools import combinations
-from typing import Dict, Iterable, List, Optional, Set, cast
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, cast
 
 from catan.engine.board import Board
 from catan.engine.rules import COSTS, DISCARD_THRESHOLD, VP_TO_WIN
@@ -43,6 +44,8 @@ BANK_STARTING_RESOURCES: Dict[str, int] = {
     "GRAIN": 19,
     "ORE": 19,
 }
+
+RngState = Tuple[Any, ...]
 
 
 @dataclass
@@ -126,6 +129,7 @@ class GameState:
     bank_resources: Dict[str, int] = field(
         default_factory=lambda: dict(BANK_STARTING_RESOURCES)
     )
+    rng_state: RngState | None = None
     longest_road_owner: int | None = None
     longest_road_length: int = 0
     largest_army_owner: int | None = None
@@ -138,6 +142,7 @@ class GameState:
         cls,
         player_names: List[str] | None = None,
         *,
+        seed: int | None = None,
         dev_deck: List[str] | None = None,
         bank_resources: Dict[str, int] | None = None,
     ) -> "GameState":
@@ -151,7 +156,6 @@ class GameState:
         Returns:
             État initial en phase SETUP_ROUND_1
         """
-        import random
 
         if player_names is None:
             player_names = ["Player 0", "Player 1"]
@@ -161,9 +165,11 @@ class GameState:
             Player(player_id=i, name=name) for i, name in enumerate(player_names)
         ]
 
+        rng = random.Random(seed)
+
         if dev_deck is None:
             shuffled_deck = list(DEFAULT_DEV_DECK)
-            random.Random().shuffle(shuffled_deck)
+            rng.shuffle(shuffled_deck)
         else:
             shuffled_deck = list(dev_deck)
 
@@ -186,7 +192,15 @@ class GameState:
             robber_tile_id=robber_tile_id,
             dev_deck=shuffled_deck,
             bank_resources=bank,
+            rng_state=rng.getstate(),
         )
+
+    def _rng(self) -> random.Random:
+        """Retourne un générateur pseudo-aléatoire initialisé avec l'état courant."""
+        rng = random.Random()
+        if self.rng_state is not None:
+            rng.setstate(self.rng_state)
+        return rng
 
     def legal_actions(self) -> List["Action"]:  # type: ignore[name-defined]
         """Retourne la liste des actions légales pour l'état courant."""
@@ -744,7 +758,6 @@ class GameState:
             RollDice,
             TradeBank,
         )
-        import random
 
         if not self.is_action_legal(action):
             raise ValueError(f"Action illégale: {action}")
@@ -775,6 +788,7 @@ class GameState:
             "robber_roller_id": self.robber_roller_id,
             "dev_deck": list(self.dev_deck),
             "bank_resources": copy.deepcopy(self.bank_resources),
+            "rng_state": self.rng_state,
             "longest_road_owner": self.longest_road_owner,
             "longest_road_length": self.longest_road_length,
             "largest_army_owner": self.largest_army_owner,
@@ -951,8 +965,10 @@ class GameState:
             if action.forced_value is not None:
                 die1, die2 = action.forced_value
             else:
-                die1 = random.randint(1, 6)
-                die2 = random.randint(1, 6)
+                rng = self._rng()
+                die1 = rng.randint(1, 6)
+                die2 = rng.randint(1, 6)
+                new_state_fields["rng_state"] = rng.getstate()
 
             dice_total = die1 + die2
             new_state_fields["last_dice_roll"] = dice_total

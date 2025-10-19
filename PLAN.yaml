@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-19T17:50:22Z
+last_updated: 2025-10-19T19:10:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 57
-  pending: 36
+  pending: 34
   in_progress: 0
-  completed: 18
+  completed: 19
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -232,11 +232,14 @@ sections:
           2025-10-19T17:50Z: Implémentation terminée — `GameState.legal_actions()` + `legal_actions_mask`, génération exhaustive (setup, phases voleur, commerce banque & trades unitaires), nouveaux tests `tests/test_legal_actions.py`, suite `pytest` 78/78 verte.
       - id: ENG-012
         title: Sérialisation état + RNG reproductible
-        status: pending
+        status: completed
         priority: P0
         dependencies: [DOC-006]
         acceptance_criteria:
           - "Sauvegarde/chargement état, seed unique et clonage"
+        notes: |
+          2025-10-19T18:45Z: Reprise — objectif implémenter sérialisation complète + RNG seedable (tests-first ENG-012).
+          2025-10-19T19:08Z: Implémentation terminée — ajout module `catan.engine.serialize`, RNG seedable (GameState.rng_state), nouveaux tests `tests/test_serialization.py`, suite `python3 -m pytest` (80 tests) verte.
 
   - id: GUI
     title: Interface graphique (H2H)
