@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-20T09:30:00Z
+last_updated: 2025-10-19T21:01:26Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 59
-  pending: 27
+  pending: 25
   in_progress: 0
-  completed: 28
+  completed: 29
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -411,11 +411,14 @@ sections:
           + ajout tests `tests/test_sim_headless.py` validant masque d'actions et seed reproductible.
       - id: SIM-002
         title: Génération et clonage déterministes
-        status: pending
+        status: completed
         priority: P0
         dependencies: [SIM-001]
         acceptance_criteria:
           - "Rejeu exact avec seed identique"
+        notes: |
+          2025-10-19T20:57Z: Démarrage de la tâche — objectif assurer la reproductibilité via clones/snapshots dans HeadlessEnv.
+          2025-10-19T21:01Z: Implémentation terminée — ajout HeadlessEnv.clone()/snapshot + support action_catalog dans reset, nouveaux tests `tests/test_sim_headless.py` (9 cas) vérifiant trajectoires identiques et restauration RNG. `python3 -m pytest tests/test_sim_headless.py -q` vert.
       - id: SIM-003
         title: Parallélisation rollouts
         status: pending

@@ -30,6 +30,7 @@ from catan.engine.actions import (
 )
 from catan.engine.board import Board
 from catan.engine.state import GameState, RESOURCE_TYPES
+from catan.engine.serialize import snapshot_to_state, state_to_snapshot
 
 ActionKey = Tuple[str, Tuple[Tuple[str, Any], ...]]
 
@@ -90,6 +91,15 @@ class ActionSpace:
 
         legal_keys = {_action_key(action) for action in legal_actions}
         return [key in legal_keys for key in self._keys]
+
+    def copy(self) -> "ActionSpace":
+        """Crée une copie de l'espace d'actions (ordre et index identiques)."""
+
+        clone = ActionSpace()
+        clone._catalog = list(self._catalog)
+        clone._keys = list(self._keys)
+        clone._key_to_index = dict(self._key_to_index)
+        return clone
 
 
 def build_default_action_catalog(board: Board | None = None) -> List[Action]:
@@ -216,6 +226,7 @@ class HeadlessEnv:
         *,
         seed: int | None = None,
         state: GameState | None = None,
+        action_catalog: Sequence[Action] | None = None,
     ) -> GameState:
         """Réinitialise l'environnement et renvoie l'état initial."""
 
@@ -227,6 +238,8 @@ class HeadlessEnv:
 
         # Réinitialiser l'espace d'actions
         self._action_space = ActionSpace(self._base_catalog)
+        if action_catalog:
+            self._action_space.register(action_catalog)
         self._action_space.register(self._state.legal_actions())
         return self._state
 
@@ -258,3 +271,20 @@ class HeadlessEnv:
         info = {"last_action": action}
 
         return StepResult(state=new_state, reward=reward, done=done, info=info)
+
+    def snapshot(self) -> Dict[str, Any]:
+        """Retourne un snapshot JSON-friendly de l'état courant."""
+
+        return state_to_snapshot(self.state)
+
+    def clone(self) -> "HeadlessEnv":
+        """Crée un clone indépendant avec état et catalogue identiques."""
+
+        state_snapshot = state_to_snapshot(self.state)
+        cloned_state = snapshot_to_state(state_snapshot)
+        clone_env = HeadlessEnv(seed=self._base_seed, action_catalog=self._base_catalog)
+        clone_env.reset(
+            state=cloned_state,
+            action_catalog=self._action_space.catalog,
+        )
+        return clone_env
