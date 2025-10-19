@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-19T17:23:26Z
+last_updated: 2025-10-19T17:50:22Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 57
-  pending: 38
+  pending: 36
   in_progress: 0
-  completed: 17
+  completed: 18
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -221,12 +221,15 @@ sections:
           2025-10-19T17:23Z: Ajout de GameState.is_game_over/winner_id, détection automatique après actions donnant des VP visibles ou cachés + tests `tests/test_victory_conditions.py`.
       - id: ENG-011
         title: Générateur de coups légaux + validateur
-        status: pending
+        status: completed
         priority: P0
         dependencies: [ENG-002, ENG-003, ENG-004, ENG-005, ENG-006, ENG-007, ENG-008]
         acceptance_criteria:
           - "Enumération exhaustive et validation des actions"
           - "Comparaison de la couverture avec catanatron (si disponible)"
+        notes: |
+          2025-10-19T17:44Z: Session en cours — objectif: ajouter une API `GameState.legal_actions()` + masque aligné sur docs/schemas, tests couvrant setup, phases voleur, commerce banque/joueur, et assurer cohérence avec `is_action_legal`.
+          2025-10-19T17:50Z: Implémentation terminée — `GameState.legal_actions()` + `legal_actions_mask`, génération exhaustive (setup, phases voleur, commerce banque & trades unitaires), nouveaux tests `tests/test_legal_actions.py`, suite `pytest` 78/78 verte.
       - id: ENG-012
         title: Sérialisation état + RNG reproductible
         status: pending

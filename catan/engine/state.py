@@ -188,6 +188,244 @@ class GameState:
             bank_resources=bank,
         )
 
+    def legal_actions(self) -> List["Action"]:  # type: ignore[name-defined]
+        """Retourne la liste des actions légales pour l'état courant."""
+        if self.is_game_over:
+            return []
+
+        if self.phase in (SetupPhase.SETUP_ROUND_1, SetupPhase.SETUP_ROUND_2):
+            return self._legal_actions_setup_phase()
+
+        if self.turn_subphase == TurnSubPhase.ROBBER_DISCARD:
+            return self._legal_actions_robber_discard_phase()
+
+        if self.turn_subphase == TurnSubPhase.ROBBER_MOVE:
+            return self._legal_actions_robber_move_phase()
+
+        if self.turn_subphase == TurnSubPhase.TRADE_RESPONSE:
+            return self._legal_actions_trade_response_phase()
+
+        return self._legal_actions_main_phase()
+
+    def legal_actions_mask(
+        self,
+        catalog: Iterable["Action"],  # type: ignore[name-defined]
+    ) -> List[bool]:
+        """Retourne un masque booléen aligné sur un catalogue d'actions."""
+
+        legal = self.legal_actions()
+        mask: List[bool] = []
+        for template in catalog:
+            mask.append(any(template == action for action in legal))
+        return mask
+
+    def _legal_actions_setup_phase(self) -> List["Action"]:  # type: ignore[name-defined]
+        from catan.engine.actions import PlaceRoad, PlaceSettlement
+
+        actions: List["Action"] = []
+        if self._waiting_for_road:
+            current_player = self.players[self.current_player_id]
+            if current_player.settlements:
+                last_settlement = current_player.settlements[-1]
+                for edge_id in self.board.vertices[last_settlement].edges:
+                    action = PlaceRoad(edge_id=edge_id, free=True)
+                    if self.is_action_legal(action):
+                        actions.append(action)
+        else:
+            for vertex_id in self.board.vertices.keys():
+                action = PlaceSettlement(vertex_id=vertex_id, free=True)
+                if self.is_action_legal(action):
+                    actions.append(action)
+        return actions
+
+    def _legal_actions_robber_discard_phase(self) -> List["Action"]:  # type: ignore[name-defined]
+        from catan.engine.actions import DiscardResources
+
+        required = self.pending_discards.get(self.current_player_id)
+        if not required:
+            return []
+
+        player = self.players[self.current_player_id]
+        actions: List["Action"] = []
+        for split in self._generate_discard_splits(player.resources, required):
+            action = DiscardResources(resources=split)
+            if self.is_action_legal(action):
+                actions.append(action)
+        return actions
+
+    def _legal_actions_robber_move_phase(self) -> List["Action"]:  # type: ignore[name-defined]
+        from catan.engine.actions import MoveRobber
+
+        mover_id = (
+            self.robber_roller_id
+            if self.robber_roller_id is not None
+            else self.current_player_id
+        )
+        if self.current_player_id != mover_id:
+            return []
+
+        actions: List["Action"] = []
+        for tile_id in self.board.tiles.keys():
+            if tile_id == self.robber_tile_id:
+                continue
+            valid_targets = self._robber_steal_targets(tile_id, mover_id)
+            if not valid_targets:
+                candidate = MoveRobber(tile_id=tile_id, steal_from=None)
+                if self.is_action_legal(candidate):
+                    actions.append(candidate)
+                continue
+            for target in valid_targets:
+                candidate = MoveRobber(tile_id=tile_id, steal_from=target)
+                if self.is_action_legal(candidate):
+                    actions.append(candidate)
+        return actions
+
+    def _legal_actions_trade_response_phase(self) -> List["Action"]:  # type: ignore[name-defined]
+        from catan.engine.actions import AcceptPlayerTrade, DeclinePlayerTrade
+
+        pending = self.pending_player_trade
+        if pending is None:
+            return []
+        candidates = [DeclinePlayerTrade()]
+        accept = AcceptPlayerTrade()
+        if self.is_action_legal(accept):
+            candidates.append(accept)
+        return [action for action in candidates if self.is_action_legal(action)]
+
+    def _legal_actions_main_phase(self) -> List["Action"]:  # type: ignore[name-defined]
+        from itertools import combinations
+
+        from catan.engine.actions import (
+            BuyDevelopment,
+            BuildCity,
+            EndTurn,
+            OfferPlayerTrade,
+            PlaceRoad,
+            PlaceSettlement,
+            PlayKnight,
+            PlayProgress,
+            RollDice,
+            TradeBank,
+        )
+
+        actions: List["Action"] = []
+
+        def append_if_legal(candidate: "Action") -> None:  # type: ignore[name-defined]
+            if self.is_action_legal(candidate):
+                # Éviter les doublons en comparant avec les actions déjà ajoutées
+                if not any(existing == candidate for existing in actions):
+                    actions.append(candidate)
+
+        # Roll dice (début de tour)
+        append_if_legal(RollDice())
+
+        current_player = self.players[self.current_player_id]
+
+        # Constructions
+        for edge_id in self.board.edges.keys():
+            append_if_legal(PlaceRoad(edge_id=edge_id))
+        for vertex_id in self.board.vertices.keys():
+            append_if_legal(PlaceSettlement(vertex_id=vertex_id))
+        for vertex_id in current_player.settlements:
+            append_if_legal(BuildCity(vertex_id=vertex_id))
+
+        # Commerce banque/ports
+        for give_resource in RESOURCE_TYPES:
+            player_amount = current_player.resources.get(give_resource, 0)
+            if player_amount <= 0:
+                continue
+            rate = self._trade_rate_for_resource(current_player, give_resource)
+            if rate <= 0:
+                continue
+            for give_total in range(rate, player_amount + 1, rate):
+                receive_amount = give_total // rate
+                for receive_resource in RESOURCE_TYPES:
+                    trade = TradeBank(
+                        give={give_resource: give_total},
+                        receive={receive_resource: receive_amount},
+                    )
+                    append_if_legal(trade)
+
+        # Achat carte développement
+        append_if_legal(BuyDevelopment())
+
+        # Cartes chevalier + progrès
+        append_if_legal(PlayKnight())
+
+        if current_player.dev_cards.get("ROAD_BUILDING", 0) > 0:
+            free_edges = [
+                edge_id
+                for edge_id in self.board.edges.keys()
+                if edge_id not in self._occupied_edges()
+            ]
+            for edge_a, edge_b in combinations(free_edges, 2):
+                action = PlayProgress(card="ROAD_BUILDING", edges=[edge_a, edge_b])
+                append_if_legal(action)
+
+        if current_player.dev_cards.get("YEAR_OF_PLENTY", 0) > 0:
+            for res_a in RESOURCE_TYPES:
+                for res_b in RESOURCE_TYPES:
+                    resources: Dict[str, int] = {}
+                    resources[res_a] = resources.get(res_a, 0) + 1
+                    resources[res_b] = resources.get(res_b, 0) + 1
+                    action = PlayProgress(card="YEAR_OF_PLENTY", resources=resources)
+                    append_if_legal(action)
+
+        if current_player.dev_cards.get("MONOPOLY", 0) > 0:
+            for resource in RESOURCE_TYPES:
+                action = PlayProgress(card="MONOPOLY", resource=resource)
+                append_if_legal(action)
+
+        # Offres joueur↔joueur (limitées aux échanges unitaires pour éviter explosion combinatoire)
+        opponent_id = self._opponent_id(self.current_player_id)
+        if opponent_id is not None and self.pending_player_trade is None:
+            for give_resource in RESOURCE_TYPES:
+                if current_player.resources.get(give_resource, 0) <= 0:
+                    continue
+                for receive_resource in RESOURCE_TYPES:
+                    if receive_resource == give_resource:
+                        continue
+                    offer = OfferPlayerTrade(
+                        give={give_resource: 1},
+                        receive={receive_resource: 1},
+                    )
+                    append_if_legal(offer)
+
+        # Fin de tour (si déjà implémentée)
+        append_if_legal(EndTurn())
+
+        return actions
+
+    @staticmethod
+    def _generate_discard_splits(
+        resource_counts: Dict[str, int],
+        total: int,
+    ) -> List[Dict[str, int]]:
+        """Génère toutes les combinaisons de défausse possibles."""
+
+        results: List[Dict[str, int]] = []
+
+        def backtrack(index: int, remaining: int, current: Dict[str, int]) -> None:
+            if remaining == 0:
+                results.append(dict(current))
+                return
+            if index >= len(RESOURCE_TYPES):
+                return
+
+            resource = RESOURCE_TYPES[index]
+            max_use = min(resource_counts.get(resource, 0), remaining)
+            for amount in range(max_use + 1):
+                if amount > 0:
+                    current[resource] = amount
+                elif resource in current:
+                    current.pop(resource, None)
+                backtrack(index + 1, remaining - amount, current)
+            if resource in current:
+                current.pop(resource, None)
+
+        backtrack(0, total, {})
+        return results
+
     def is_action_legal(self, action: "Action") -> bool:  # type: ignore
         """Vérifie si une action est légale dans l'état actuel.
 
