@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-19T19:10:00Z
+last_updated: 2025-10-19T18:40:21Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 57
-  pending: 34
+  pending: 33
   in_progress: 0
-  completed: 19
+  completed: 20
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -322,12 +322,15 @@ sections:
     tasks:
       - id: SIM-001
         title: Core headless compatible engine
-        status: pending
+        status: completed
         priority: P0
         dependencies: [ENG-011, ENG-012]
         acceptance_criteria:
           - "API step() et reset(), masques d’actions"
           - "API compatible/inspirée de catanatron pour faciliter réutilisation"
+        notes: |
+          2025-10-19: Implémentation `catan.sim.runner.HeadlessEnv` (reset/step, catalogue dynamique)
+          + ajout tests `tests/test_sim_headless.py` validant masque d'actions et seed reproductible.
       - id: SIM-002
         title: Génération et clonage déterministes
         status: pending
