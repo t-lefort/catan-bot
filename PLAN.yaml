@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-19T21:27:26Z
+last_updated: 2025-10-20T10:05:00Z
 owner: "Thomas + Agent"
 
 status_summary:
-  total: 59
+  total: 60
   pending: 23
   in_progress: 0
-  completed: 31
+  completed: 32
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -390,12 +390,12 @@ sections:
           headless `tests/test_gui_hud_controller.py` (3 cas) validant
           synchronisation des défausses et mises à jour après discard.
       - id: GUI-009
-        title: Journal d’actions + undo limité
+        title: Journal d’actions
         status: pending
         priority: P3
         dependencies: [ENG-012]
         acceptance_criteria:
-          - "Historique consultable, undo si validé"
+          - "Historique consultable"
       - id: GUI-010
         title: Sauvegarde/chargement partie
         status: pending
@@ -403,6 +403,21 @@ sections:
         dependencies: [ENG-012]
         acceptance_criteria:
           - "Fichiers de sauvegarde stables"
+
+      - id: GUI-011
+        title: App orchestrator + boucle évènementielle
+        status: completed
+        priority: P1
+        dependencies: [APP-002, GUI-002, GUI-003, GUI-004, GUI-006, GUI-008]
+        acceptance_criteria:
+          - "Module catan.gui.app orchestre contrôleurs et expose état UI testable"
+          - "Tests couvrent transitions setup → tour de jeu et actions principales"
+          - "Script exécutable lance une partie manuelle MVP"
+        notes: |
+          2025-10-20T09:15Z: Démarrage de la tâche — objectif créer un orchestrateur GUI
+          unifié (controllers + GameService) et exposer un point d'entrée interactif.
+          2025-10-20T10:04Z: Tâche complétée — ajout catan.gui.app (UIState + CatanH2HApp),
+          tests `tests/test_gui_app.py`, support EndTurn dans GameState et script `play_gui.py`.
 
   - id: SIM
     title: Simulation rapide (headless)

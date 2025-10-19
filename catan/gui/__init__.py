@@ -13,7 +13,7 @@ Modules:
 - development_controller: contrôleur cartes de développement (GUI-007)
 - hud_controller: contrôleur HUD (GUI-008)
 - components: widgets réutilisables (boutons, overlays) [à venir]
-- app: boucle principale pygame et gestion des évènements [à venir]
+- app: orchestrateur principal + boucle pygame
 """
 
 __all__ = [
@@ -25,4 +25,5 @@ __all__ = [
     "trade_controller",
     "development_controller",
     "hud_controller",
+    "app",
 ]

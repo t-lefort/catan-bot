@@ -29,7 +29,7 @@ def pygame_init():
 @pytest.fixture
 def game_in_play(pygame_init):
     """Create a game state in PLAY phase with resources for testing."""
-    state = GameState.new_1v1_game()
+    state = GameState.new_1v1_game(seed=42)
 
     # Complete the setup phase properly using legal actions
     legal = state.legal_actions()
@@ -79,7 +79,7 @@ def game_in_play(pygame_init):
     from catan.engine.actions import RollDice
     state = state.apply_action(RollDice())
 
-    # Give players plenty of resources for testing
+    # Give players plenty of resources for testing (after rolling dice)
     state.players[0].resources = {
         "BRICK": 10,
         "LUMBER": 10,

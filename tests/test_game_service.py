@@ -5,7 +5,7 @@ import pytest
 from catan.app.event_bus import EventBus
 from catan.app.events import ActionAppliedEvent, GameEndedEvent, GameStartedEvent
 from catan.app.game_service import GameService
-from catan.engine.actions import PlaceRoad, PlaceSettlement
+from catan.engine.actions import EndTurn, PlaceRoad, PlaceSettlement, RollDice
 from catan.engine.state import GameState, SetupPhase
 
 
@@ -97,3 +97,28 @@ def test_game_service_emits_game_ended_event(monkeypatch: pytest.MonkeyPatch) ->
     end_event = events[-1]
     assert isinstance(end_event, GameEndedEvent)
     assert end_event.winner_id == 0
+
+
+def test_end_turn_is_legal_after_dice_roll() -> None:
+    service = GameService()
+    service.start_new_game(player_names=["Alice", "Bob"], seed=2025)
+
+    # Compléter la phase de setup
+    while service.state.phase != SetupPhase.PLAY:
+        next_action = service.legal_actions()[0]
+        service.dispatch(next_action)
+
+    # Lancer les dés pour entrer dans la phase principale du tour
+    roll_action = next(
+        action for action in service.legal_actions() if isinstance(action, RollDice)
+    )
+    service.dispatch(roll_action)
+
+    legal_after_roll = service.legal_actions()
+    assert EndTurn() in legal_after_roll
+
+    current_player = service.state.current_player_id
+    service.dispatch(EndTurn())
+
+    assert service.state.current_player_id != current_player
+    assert not service.state.dice_rolled_this_turn

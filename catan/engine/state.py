@@ -453,6 +453,7 @@ class GameState:
             AcceptPlayerTrade,
             BuyDevelopment,
             BuildCity,
+            EndTurn,
             DeclinePlayerTrade,
             DiscardResources,
             MoveRobber,
@@ -729,6 +730,15 @@ class GameState:
                 return False
             return True
 
+        if isinstance(action, EndTurn):
+            if self.turn_subphase != TurnSubPhase.MAIN:
+                return False
+            if not self.dice_rolled_this_turn:
+                return False
+            if self.pending_player_trade is not None:
+                return False
+            return True
+
         return False
 
     def apply_action(self, action: "Action") -> "GameState":  # type: ignore
@@ -747,6 +757,7 @@ class GameState:
             AcceptPlayerTrade,
             BuyDevelopment,
             BuildCity,
+            EndTurn,
             DeclinePlayerTrade,
             DiscardResources,
             MoveRobber,
@@ -1048,6 +1059,25 @@ class GameState:
                 stolen = self._steal_resource(new_players[action.steal_from])
                 if stolen is not None:
                     mover.resources[stolen] += 1
+
+        elif isinstance(action, EndTurn):
+            # Les nouvelles cartes dev deviennent jouables au tour suivant
+            for card, amount in current_player.new_dev_cards.items():
+                if amount > 0:
+                    current_player.new_dev_cards[card] = 0
+                    current_player.dev_cards[card] += amount
+
+            next_player_id = (self.current_player_id + 1) % len(new_players)
+
+            new_state_fields["current_player_id"] = next_player_id
+            new_state_fields["turn_number"] = self.turn_number + 1
+            new_state_fields["dice_rolled_this_turn"] = False
+            new_state_fields["last_dice_roll"] = None
+            new_state_fields["turn_subphase"] = TurnSubPhase.MAIN
+            new_state_fields["pending_player_trade"] = None
+            new_state_fields["pending_discards"] = {}
+            new_state_fields["pending_discard_queue"] = []
+            new_state_fields["robber_roller_id"] = None
 
         if recompute_longest_road:
             self._apply_longest_road_update(new_state_fields, new_players)
