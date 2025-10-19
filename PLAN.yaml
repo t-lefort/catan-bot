@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-19T21:35:00Z
+last_updated: 2025-10-19T22:00:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 59
-  pending: 31
+  pending: 30
   in_progress: 0
-  completed: 24
+  completed: 25
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -301,11 +301,21 @@ sections:
           - Tous les tests passent (100/100)
       - id: GUI-003
         title: Setup initial (placements)
-        status: pending
+        status: completed
         priority: P1
         dependencies: [ENG-002]
         acceptance_criteria:
           - "Saisie guidée ordre serpent + distribution"
+        notes: |
+          2025-10-19T22:00Z: Implémentation terminée
+          - Module catan.gui.setup_controller créé (gestion clics, positions légales, instructions)
+          - BoardRenderer enrichi: render_highlighted_vertices/edges, get_vertex/edge_at_position
+          - Détection de clics géométrique (distance point-sommet, point-segment)
+          - Tests unitaires (tests/test_gui_setup_controller.py): 13 tests validant contrôleur
+          - Tests intégration (tests/test_gui_setup_integration.py): 7 tests validant rendu + clics
+          - Script démo interactif (demo_gui_setup.py) pour validation manuelle
+          - Ordre serpent géré automatiquement, surbrillance verte des positions légales
+          - Tous les tests passent (120/120)
       - id: GUI-004
         title: Tour de jeu (lancer, voleur, voler)
         status: pending

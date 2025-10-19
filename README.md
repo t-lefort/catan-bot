@@ -64,7 +64,9 @@ pip install -r requirements.txt
 - Avec couverture: `pytest --cov=catan tests/`
 - Tests GUI (headless): `SDL_VIDEODRIVER=dummy pytest tests/test_gui_*.py`
 
-## Démo GUI (GUI-002)
+## Démos GUI
+
+### Démo rendu (GUI-002)
 Pour tester visuellement le rendu du plateau et des pièces :
 
 ```bash
@@ -73,3 +75,13 @@ python3 demo_gui.py
 ```
 
 Le script affiche le plateau standard avec quelques pièces de test. Appuyez sur ESC ou Q pour quitter.
+
+### Démo setup interactif (GUI-003)
+Pour tester la phase de placement initial avec interactions :
+
+```bash
+source venv/bin/activate
+python3 demo_gui_setup.py
+```
+
+Cliquez sur les sommets verts pour placer colonies, puis sur les arêtes vertes pour placer routes. Le système gère automatiquement l'ordre serpent (J0→J1 puis J1→J0) et la distribution de ressources. Appuyez sur ESC ou Q pour quitter.

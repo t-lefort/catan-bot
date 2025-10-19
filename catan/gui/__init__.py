@@ -5,8 +5,10 @@ entre deux humains, conformément à docs/gui-h2h.md.
 
 Modules:
 - renderer: rendu du plateau, pièces et HUD
-- components: widgets réutilisables (boutons, overlays)
-- app: boucle principale pygame et gestion des évènements
+- geometry: calculs de transformation logique -> écran
+- setup_controller: contrôleur pour la phase de placement initial (GUI-003)
+- components: widgets réutilisables (boutons, overlays) [à venir]
+- app: boucle principale pygame et gestion des évènements [à venir]
 """
 
-__all__ = ["renderer", "components", "app"]
+__all__ = ["renderer", "geometry", "setup_controller"]

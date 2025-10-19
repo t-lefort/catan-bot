@@ -64,3 +64,6 @@ La méthode a l'air de bien fonctionner avec ChatGPT, je vais faire une passe av
 Il faudrait aussi définir un template pour les commits comme Claude fait. Chatgpt fais des commits tout pourris sans détail. Et il faudra que je passe ce journal dans une IA pour en tirer les idées et faire un boilerplate pour projets IA
 J'ai aussi arreté d'utiliser le mode "Plan" de Claude que j'avais testé et qui marche bien.
 Je crois que les IA marche mieux quand on type les variables, là il ne la pas fait, j'imagine car ça n'utilise pas la dernière version de Python. Il faudrait préciser au début de setup l'environnement et que l'on utilise bien la dernière version stable du langage
+
+## Etape 15
+Le développement en suivant le plan a l'air de bien se dérouler, la première version de la GUI fonctionne beaucoup mieux qu'à l'essai d'avant

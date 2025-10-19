@@ -16,7 +16,7 @@ Conventions visuelles (conforme docs/gui-h2h.md):
 from __future__ import annotations
 
 import math
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Set
 
 import pygame
 
@@ -55,10 +55,18 @@ COLOR_ROAD = (255, 255, 255)
 COLOR_SETTLEMENT = (255, 255, 255)
 COLOR_CITY = (255, 255, 255)
 
+# Couleurs pour la surbrillance (setup/interactions)
+COLOR_HIGHLIGHT_VERTEX = (100, 255, 100, 180)  # Vert semi-transparent
+COLOR_HIGHLIGHT_EDGE = (100, 255, 100, 180)    # Vert semi-transparent
+
 # Tailles pièces
 ROAD_WIDTH = 6
 SETTLEMENT_RADIUS = 10
 CITY_SIZE = 16
+
+# Tailles pour détection de clics
+VERTEX_CLICK_RADIUS = 15  # Rayon de détection pour les clics sur sommets
+EDGE_CLICK_DISTANCE = 10  # Distance max pour détecter un clic sur une arête
 
 
 class BoardRenderer:
@@ -96,44 +104,42 @@ class BoardRenderer:
         self._font: Optional[pygame.font.Font] = None
 
     def _precompute_coordinates(self) -> None:
-        """Precompute screen coordinates for all hexagons and vertices."""
-        # Hex vertices in pointy-top orientation (starting from top)
-        hex_angles = [math.radians(30 + 60 * i) for i in range(6)]
+        """Precompute screen coordinates for all hexagons and vertices.
 
-        for tile_id, tile in self.board.tiles.items():
-            # Convert cube coordinates to pixel position
-            # Using axial coordinates derived from cube
-            q = tile.cube.x
-            r = tile.cube.z
+        The Board provides logical coordinates for vertices. We need to:
+        1. Scale them to screen space
+        2. Apply the screen offset
 
-            # Pointy-top hex layout
-            x = HEX_SIZE * math.sqrt(3) * (q + r / 2.0)
-            y = HEX_SIZE * 1.5 * r
-
-            # Apply screen offset
-            center_x = int(BOARD_OFFSET_X + x)
-            center_y = int(BOARD_OFFSET_Y + y)
-
-            # Compute 6 vertices
-            vertices = []
-            for angle in hex_angles:
-                vx = int(center_x + HEX_SIZE * math.cos(angle))
-                vy = int(center_y + HEX_SIZE * math.sin(angle))
-                vertices.append((vx, vy))
-
-            self._hex_coords[tile_id] = vertices
-
-        # Map logical vertices to screen coordinates
+        The Board uses:
+        - axial_to_pixel: x = sqrt(3) * (q + r/2), y = 1.5 * r
+        - vertex offsets: (cos(30°+60°k), sin(30°+60°k)) for k in [0..5]
+        """
+        # First, map all logical vertex coordinates to screen coordinates
+        # The Board already computed vertex.position in logical space
         for vertex_id, vertex in self.board.vertices.items():
-            # vertex.position contains (x, y) in logical board space
-            # Scale to screen coordinates
-            x = vertex.position[0] * HEX_SIZE
-            y = vertex.position[1] * HEX_SIZE
+            # vertex.position is (x, y) in logical hex coordinate space
+            # where each hex has unit size
+            logical_x, logical_y = vertex.position
 
-            screen_x = int(BOARD_OFFSET_X + x * math.sqrt(3) / 2.0)
-            screen_y = int(BOARD_OFFSET_Y + y)
+            # Scale by HEX_SIZE and apply offset
+            screen_x = int(BOARD_OFFSET_X + logical_x * HEX_SIZE)
+            screen_y = int(BOARD_OFFSET_Y + logical_y * HEX_SIZE)
 
             self._vertex_screen_coords[vertex_id] = (screen_x, screen_y)
+
+        # Now compute hex polygon coordinates using the actual vertex positions
+        # This ensures hexagons align perfectly with vertices
+        for tile_id, tile in self.board.tiles.items():
+            # Get the 6 vertices of this tile (in order)
+            vertex_ids = tile.vertices
+
+            # Get screen coordinates for these vertices
+            vertices = []
+            for vid in vertex_ids:
+                if vid in self._vertex_screen_coords:
+                    vertices.append(self._vertex_screen_coords[vid])
+
+            self._hex_coords[tile_id] = vertices
 
     def _ensure_font(self) -> pygame.font.Font:
         """Lazy init font."""
@@ -159,10 +165,13 @@ class BoardRenderer:
                 center_x = sum(v[0] for v in vertices) // 6
                 center_y = sum(v[1] for v in vertices) // 6
 
-                # Red for 6 and 8 (high probability)
-                number_color = COLOR_NUMBER_RED if tile.pip in (6, 8) else COLOR_NUMBER
+                # Draw white circle background for better readability
+                pygame.draw.circle(self.screen, (255, 255, 255), (center_x, center_y), 16, width=0)
+                pygame.draw.circle(self.screen, (0, 0, 0), (center_x, center_y), 16, width=2)
+
+                # All numbers in black for better contrast
                 font = self._ensure_font()
-                text = font.render(str(tile.pip), True, number_color)
+                text = font.render(str(tile.pip), True, (0, 0, 0))
                 text_rect = text.get_rect(center=(center_x, center_y))
                 self.screen.blit(text, text_rect)
 
@@ -182,7 +191,24 @@ class BoardRenderer:
         self._render_ports()
 
     def _render_ports(self) -> None:
-        """Draw port markers on corresponding edges."""
+        """Draw port markers on corresponding edges.
+
+        Ports are displayed as larger circles with resource type indicators,
+        positioned slightly outside the edge to be more visible.
+        """
+        PORT_RADIUS = 18  # Larger radius for better visibility
+        PORT_OFFSET_FACTOR = 1.3  # Push port markers outward from center
+
+        # Map port types to colors for better recognition
+        PORT_COLORS = {
+            "ANY": (200, 200, 200),      # Gray for 3:1
+            "BRICK": (200, 80, 50),      # Brick red
+            "LUMBER": (80, 150, 60),     # Green
+            "WOOL": (180, 255, 180),     # Light green
+            "GRAIN": (240, 220, 100),    # Yellow
+            "ORE": (120, 120, 120),      # Dark gray
+        }
+
         for port in self.board.ports:
             # Get the two vertices of the port
             v1_id, v2_id = port.vertices
@@ -192,20 +218,54 @@ class BoardRenderer:
             v1_pos = self._vertex_screen_coords[v1_id]
             v2_pos = self._vertex_screen_coords[v2_id]
 
-            # Midpoint
-            mid_x = (v1_pos[0] + v2_pos[0]) // 2
-            mid_y = (v1_pos[1] + v2_pos[1]) // 2
+            # Calculate midpoint of the edge
+            edge_mid_x = (v1_pos[0] + v2_pos[0]) / 2
+            edge_mid_y = (v1_pos[1] + v2_pos[1]) / 2
 
-            # Draw small circle for port marker
-            port_color = (255, 255, 255)
-            pygame.draw.circle(self.screen, port_color, (mid_x, mid_y), 8, width=2)
+            # Find the center of the board (approximate)
+            board_center_x = BOARD_OFFSET_X
+            board_center_y = BOARD_OFFSET_Y
 
-            # Draw port type (simplified)
+            # Vector from board center to edge midpoint
+            dx = edge_mid_x - board_center_x
+            dy = edge_mid_y - board_center_y
+            dist = math.sqrt(dx * dx + dy * dy)
+
+            if dist > 0:
+                # Normalize and push outward
+                dx /= dist
+                dy /= dist
+
+                # Position port marker further out
+                port_x = int(edge_mid_x + dx * HEX_SIZE * 0.4)
+                port_y = int(edge_mid_y + dy * HEX_SIZE * 0.4)
+            else:
+                # Fallback to edge midpoint
+                port_x = int(edge_mid_x)
+                port_y = int(edge_mid_y)
+
+            # Draw port circle with resource-specific color
+            port_color = PORT_COLORS.get(port.kind, (255, 255, 255))
+            pygame.draw.circle(self.screen, port_color, (port_x, port_y), PORT_RADIUS, width=0)
+            pygame.draw.circle(self.screen, (0, 0, 0), (port_x, port_y), PORT_RADIUS, width=3)
+
+            # Draw port ratio text
             font = self._ensure_font()
-            label = "?" if port.kind == "ANY" else port.kind[0]  # First letter
-            text = font.render(label, True, (255, 255, 255))
-            text_rect = text.get_rect(center=(mid_x, mid_y))
+            if port.kind == "ANY":
+                label = "3:1"
+            else:
+                label = f"2:1"
+
+            text = font.render(label, True, (0, 0, 0))
+            text_rect = text.get_rect(center=(port_x, port_y - 2))
             self.screen.blit(text, text_rect)
+
+            # Draw small resource indicator for specific ports
+            if port.kind != "ANY":
+                small_font = pygame.font.SysFont("Arial", 10, bold=True)
+                res_text = small_font.render(port.kind[0], True, (0, 0, 0))
+                res_rect = res_text.get_rect(center=(port_x, port_y + 6))
+                self.screen.blit(res_text, res_rect)
 
     def render_pieces(self, state: GameState) -> None:
         """Render roads, settlements, and cities from game state.
@@ -262,6 +322,154 @@ class BoardRenderer:
         rect.center = pos
         pygame.draw.rect(self.screen, color, rect, width=0)
         pygame.draw.rect(self.screen, (0, 0, 0), rect, width=2)
+
+    def render_highlighted_vertices(self, vertex_ids: Set[int]) -> None:
+        """Render highlighted vertices (for legal settlement placements).
+
+        Args:
+            vertex_ids: Set of vertex IDs to highlight
+        """
+        for vertex_id in vertex_ids:
+            if vertex_id not in self._vertex_screen_coords:
+                continue
+
+            pos = self._vertex_screen_coords[vertex_id]
+
+            # Draw semi-transparent circle
+            # Create a temporary surface with alpha
+            size = SETTLEMENT_RADIUS * 3
+            surf = pygame.Surface((size, size), pygame.SRCALPHA)
+            pygame.draw.circle(
+                surf,
+                COLOR_HIGHLIGHT_VERTEX,
+                (size // 2, size // 2),
+                SETTLEMENT_RADIUS + 5
+            )
+            self.screen.blit(surf, (pos[0] - size // 2, pos[1] - size // 2))
+
+    def render_highlighted_edges(self, edge_ids: Set[int]) -> None:
+        """Render highlighted edges (for legal road placements).
+
+        Args:
+            edge_ids: Set of edge IDs to highlight
+        """
+        for edge_id in edge_ids:
+            edge = self.board.edges.get(edge_id)
+            if edge is None:
+                continue
+
+            v1_id, v2_id = edge.vertices
+            if v1_id not in self._vertex_screen_coords or v2_id not in self._vertex_screen_coords:
+                continue
+
+            v1_pos = self._vertex_screen_coords[v1_id]
+            v2_pos = self._vertex_screen_coords[v2_id]
+
+            # Draw thicker semi-transparent line
+            pygame.draw.line(
+                self.screen,
+                (100, 255, 100),  # Bright green
+                v1_pos,
+                v2_pos,
+                width=ROAD_WIDTH + 4
+            )
+
+    def get_vertex_at_position(self, pos: Tuple[int, int]) -> Optional[int]:
+        """Find vertex ID at given screen position.
+
+        Args:
+            pos: (x, y) screen coordinates
+
+        Returns:
+            Vertex ID if click is near a vertex, None otherwise
+        """
+        click_x, click_y = pos
+
+        for vertex_id, vertex_pos in self._vertex_screen_coords.items():
+            vx, vy = vertex_pos
+            distance = math.sqrt((click_x - vx) ** 2 + (click_y - vy) ** 2)
+
+            if distance <= VERTEX_CLICK_RADIUS:
+                return vertex_id
+
+        return None
+
+    def get_edge_at_position(self, pos: Tuple[int, int]) -> Optional[int]:
+        """Find edge ID at given screen position.
+
+        Args:
+            pos: (x, y) screen coordinates
+
+        Returns:
+            Edge ID if click is near an edge, None otherwise
+        """
+        click_x, click_y = pos
+
+        for edge_id, edge in self.board.edges.items():
+            v1_id, v2_id = edge.vertices
+            if v1_id not in self._vertex_screen_coords or v2_id not in self._vertex_screen_coords:
+                continue
+
+            v1_pos = self._vertex_screen_coords[v1_id]
+            v2_pos = self._vertex_screen_coords[v2_id]
+
+            # Calculate distance from point to line segment
+            distance = self._point_to_segment_distance(
+                (click_x, click_y), v1_pos, v2_pos
+            )
+
+            if distance <= EDGE_CLICK_DISTANCE:
+                return edge_id
+
+        return None
+
+    def _point_to_segment_distance(
+        self,
+        point: Tuple[int, int],
+        seg_a: Tuple[int, int],
+        seg_b: Tuple[int, int]
+    ) -> float:
+        """Calculate distance from point to line segment.
+
+        Args:
+            point: (x, y) coordinates of point
+            seg_a: (x, y) coordinates of segment start
+            seg_b: (x, y) coordinates of segment end
+
+        Returns:
+            Distance from point to segment
+        """
+        px, py = point
+        ax, ay = seg_a
+        bx, by = seg_b
+
+        # Vector from A to B
+        abx = bx - ax
+        aby = by - ay
+
+        # Vector from A to P
+        apx = px - ax
+        apy = py - ay
+
+        # Squared length of AB
+        ab_squared = abx * abx + aby * aby
+
+        if ab_squared == 0:
+            # A and B are the same point
+            return math.sqrt(apx * apx + apy * apy)
+
+        # Project AP onto AB, computing parameterized position t
+        t = max(0, min(1, (apx * abx + apy * aby) / ab_squared))
+
+        # Compute projection point
+        proj_x = ax + t * abx
+        proj_y = ay + t * aby
+
+        # Distance from P to projection
+        dx = px - proj_x
+        dy = py - proj_y
+
+        return math.sqrt(dx * dx + dy * dy)
 
 
 __all__ = ["BoardRenderer", "SCREEN_WIDTH", "SCREEN_HEIGHT"]
