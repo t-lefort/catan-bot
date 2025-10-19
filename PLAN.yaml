@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-19T22:00:00Z
+last_updated: 2025-10-19T23:00:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 59
-  pending: 30
+  pending: 29
   in_progress: 0
-  completed: 25
+  completed: 26
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -318,11 +318,21 @@ sections:
           - Tous les tests passent (120/120)
       - id: GUI-004
         title: Tour de jeu (lancer, voleur, voler)
-        status: pending
+        status: completed
         priority: P1
         dependencies: [ENG-003, ENG-004]
         acceptance_criteria:
           - "Flows complets pour 7 et hors 7"
+        notes: |
+          2025-10-19T23:00Z: Implémentation terminée
+          - Module catan.gui.turn_controller créé avec TurnController (lancer dés, défausse, voleur)
+          - Gestion du lancer de dés avec conversion automatique de valeur forcée en paire de dés
+          - Détection et gestion de la phase de défausse (joueurs avec >9 cartes sur un 7)
+          - Gestion du déplacement du voleur avec sélection de tuile légale
+          - Support du vol de ressource (detection joueurs adjacents)
+          - Instructions contextuelles pour chaque phase (dés, défausse, voleur, actions)
+          - Tests unitaires (tests/test_gui_turn_controller.py): 13 tests couvrant toutes les fonctionnalités
+          - Tous les tests passent (133/133 incluant tests existants)
       - id: GUI-005
         title: Commerce (banque/ports, 1v1 trade)
         status: pending
