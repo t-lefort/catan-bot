@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-19T15:24:42Z
+last_updated: 2025-10-19T17:23:26Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 57
-  pending: 39
+  pending: 38
   in_progress: 0
-  completed: 16
+  completed: 17
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -212,11 +212,13 @@ sections:
           2025-10-18T08:04Z: Implémentation terminée — tests `tests/test_titles.py` ajoutés (longest road + largest army). Logique de recalcul intégrée dans `GameState` avec mise à jour des VP et invariants (titres retirés en cas d'égalité < seuil). `pytest` 68/68 vert.
       - id: ENG-010
         title: Conditions de victoire (15 VP)
-        status: pending
+        status: completed
         priority: P0
         dependencies: [ENG-005, ENG-006, ENG-009]
         acceptance_criteria:
           - "Victoire déclenchée à 15 VP"
+        notes: |
+          2025-10-19T17:23Z: Ajout de GameState.is_game_over/winner_id, détection automatique après actions donnant des VP visibles ou cachés + tests `tests/test_victory_conditions.py`.
       - id: ENG-011
         title: Générateur de coups légaux + validateur
         status: pending

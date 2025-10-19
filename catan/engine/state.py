@@ -14,7 +14,7 @@ from itertools import combinations
 from typing import Dict, Iterable, List, Optional, Set, cast
 
 from catan.engine.board import Board
-from catan.engine.rules import COSTS, DISCARD_THRESHOLD
+from catan.engine.rules import COSTS, DISCARD_THRESHOLD, VP_TO_WIN
 
 RESOURCE_TYPES: tuple[str, ...] = ("BRICK", "LUMBER", "WOOL", "GRAIN", "ORE")
 DEV_CARD_TYPES: tuple[str, ...] = (
@@ -130,6 +130,8 @@ class GameState:
     longest_road_length: int = 0
     largest_army_owner: int | None = None
     largest_army_size: int = 0
+    is_game_over: bool = False
+    winner_id: int | None = None
 
     @classmethod
     def new_1v1_game(
@@ -210,6 +212,9 @@ class GameState:
             RollDice,
             TradeBank,
         )
+
+        if self.is_game_over:
+            return False
 
         # Pendant setup, les règles sont spécifiques
         if self.phase in (SetupPhase.SETUP_ROUND_1, SetupPhase.SETUP_ROUND_2):
@@ -536,6 +541,8 @@ class GameState:
             "longest_road_length": self.longest_road_length,
             "largest_army_owner": self.largest_army_owner,
             "largest_army_size": self.largest_army_size,
+            "is_game_over": self.is_game_over,
+            "winner_id": self.winner_id,
         }
 
         if isinstance(action, PlaceSettlement):
@@ -793,6 +800,8 @@ class GameState:
         if recompute_largest_army:
             self._apply_largest_army_update(new_state_fields, new_players)
 
+        self._check_victory(new_state_fields, new_players)
+
         return GameState(**new_state_fields)
 
     def _player_can_afford(self, player: Player, cost: Dict[str, int]) -> bool:
@@ -874,6 +883,34 @@ class GameState:
     def _grant_hidden_victory_point(player: Player) -> None:
         """Ajoute un point de victoire caché à un joueur."""
         player.hidden_victory_points += 1
+
+    def _check_victory(
+        self,
+        new_state_fields: Dict[str, object],
+        players: List[Player],
+    ) -> None:
+        """Détermine si un joueur atteint le seuil de victoire."""
+        if new_state_fields.get("is_game_over", False):
+            return
+
+        totals = {
+            player.player_id: player.victory_points + player.hidden_victory_points
+            for player in players
+        }
+        eligible = {
+            player_id: total for player_id, total in totals.items() if total >= VP_TO_WIN
+        }
+        if not eligible:
+            return
+
+        winner_id = max(eligible.items(), key=lambda item: (item[1], -item[0]))[0]
+        new_state_fields["is_game_over"] = True
+        new_state_fields["winner_id"] = winner_id
+        new_state_fields["pending_player_trade"] = None
+        new_state_fields["pending_discards"] = {}
+        new_state_fields["pending_discard_queue"] = []
+        new_state_fields["robber_roller_id"] = None
+        new_state_fields["turn_subphase"] = TurnSubPhase.MAIN
 
     def _apply_longest_road_update(
         self,

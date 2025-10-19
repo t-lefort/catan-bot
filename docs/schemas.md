@@ -67,6 +67,8 @@ Nous utilisons des coordonnées cube `(x, y, z)` avec contrainte `x + y + z = 0`
   "schema_version": "0.1.0",
   "game_id": "7e3a2c2c-9a1f-4c4a-8d8a-1ef6adf1b4c3",
   "variant": {"vp_to_win": 15, "discard_threshold": 9},
+  "is_game_over": false,
+  "winner_id": null,
   "rng_state": {"type": "py_random", "state": [3, [2147483648, ...], 0]},
   "turn": {
     "number": 12,
@@ -161,6 +163,10 @@ Nous utilisons des coordonnées cube `(x, y, z)` avec contrainte `x + y + z = 0`
   ]
 }
 ```
+
+Champs dérivés pour la détection de fin de partie:
+- `is_game_over`: booléen indiquant si la partie est terminée.
+- `winner_id`: `PlayerId` du vainqueur (ou `null` tant que le seuil n'est pas atteint).
 
 ### ActionRecord
 
