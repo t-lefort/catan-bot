@@ -7,10 +7,13 @@ Conforme aux schémas (docs/schemas.md) et specs (docs/specs.md).
 from __future__ import annotations
 
 import copy
+from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import Dict, Iterable, List, Optional, Set
+from itertools import combinations
+from typing import Dict, Iterable, List, Optional, Set, cast
 
+from catan.engine.board import Board
 from catan.engine.rules import COSTS, DISCARD_THRESHOLD
 
 RESOURCE_TYPES: tuple[str, ...] = ("BRICK", "LUMBER", "WOOL", "GRAIN", "ORE")
@@ -123,6 +126,10 @@ class GameState:
     bank_resources: Dict[str, int] = field(
         default_factory=lambda: dict(BANK_STARTING_RESOURCES)
     )
+    longest_road_owner: int | None = None
+    longest_road_length: int = 0
+    largest_army_owner: int | None = None
+    largest_army_size: int = 0
 
     @classmethod
     def new_1v1_game(
@@ -143,8 +150,6 @@ class GameState:
             État initial en phase SETUP_ROUND_1
         """
         import random
-
-        from catan.engine.board import Board
 
         if player_names is None:
             player_names = ["Player 0", "Player 1"]
@@ -505,6 +510,9 @@ class GameState:
         new_players = [copy.deepcopy(p) for p in self.players]
         current_player = new_players[self.current_player_id]
 
+        recompute_longest_road = False
+        recompute_largest_army = False
+
         new_state_fields = {
             "board": self.board,
             "players": new_players,
@@ -524,6 +532,10 @@ class GameState:
             "robber_roller_id": self.robber_roller_id,
             "dev_deck": list(self.dev_deck),
             "bank_resources": copy.deepcopy(self.bank_resources),
+            "longest_road_owner": self.longest_road_owner,
+            "longest_road_length": self.longest_road_length,
+            "largest_army_owner": self.largest_army_owner,
+            "largest_army_size": self.largest_army_size,
         }
 
         if isinstance(action, PlaceSettlement):
@@ -546,6 +558,7 @@ class GameState:
                 new_state_fields["_waiting_for_road"] = True
             else:
                 new_state_fields["_waiting_for_road"] = False
+            recompute_longest_road = True
 
         elif isinstance(action, PlaceRoad):
             # Placer la route
@@ -578,6 +591,7 @@ class GameState:
                 new_state_fields.update(self._advance_setup_turn())
             else:
                 new_state_fields["_waiting_for_road"] = False
+            recompute_longest_road = True
 
         elif isinstance(action, BuildCity):
             # Améliorer une colonie en ville
@@ -658,6 +672,7 @@ class GameState:
             new_state_fields["pending_discard_queue"] = []
             new_state_fields["robber_roller_id"] = self.current_player_id
             new_state_fields["current_player_id"] = self.current_player_id
+            recompute_largest_army = True
 
         elif isinstance(action, PlayProgress):
             card_type = action.card
@@ -665,6 +680,7 @@ class GameState:
             if card_type == "ROAD_BUILDING":
                 for edge_id in action.edges or []:
                     current_player.roads.append(edge_id)
+                recompute_longest_road = True
             elif card_type == "YEAR_OF_PLENTY":
                 resources = action.resources or {}
                 self._remove_resources_from_bank(
@@ -772,6 +788,11 @@ class GameState:
                 if stolen is not None:
                     mover.resources[stolen] += 1
 
+        if recompute_longest_road:
+            self._apply_longest_road_update(new_state_fields, new_players)
+        if recompute_largest_army:
+            self._apply_largest_army_update(new_state_fields, new_players)
+
         return GameState(**new_state_fields)
 
     def _player_can_afford(self, player: Player, cost: Dict[str, int]) -> bool:
@@ -853,6 +874,185 @@ class GameState:
     def _grant_hidden_victory_point(player: Player) -> None:
         """Ajoute un point de victoire caché à un joueur."""
         player.hidden_victory_points += 1
+
+    def _apply_longest_road_update(
+        self,
+        new_state_fields: Dict[str, object],
+        players: List[Player],
+    ) -> None:
+        """Recalcule la plus longue route et met à jour les points."""
+
+        board = cast(Board, new_state_fields.get("board", self.board))
+        vertex_owner = self._vertex_owner_map(players)
+        lengths = {
+            player.player_id: self._longest_road_length_for_player(
+                board, player, vertex_owner
+            )
+            for player in players
+        }
+        best_length = max(lengths.values(), default=0)
+        best_players = [
+            player_id for player_id, length in lengths.items() if length == best_length
+        ]
+
+        current_owner = self.longest_road_owner
+        current_length = (
+            lengths.get(current_owner, 0) if current_owner is not None else 0
+        )
+        new_owner = current_owner
+        new_length = current_length
+
+        if best_length < 5:
+            new_owner = None
+            new_length = 0
+        else:
+            if len(best_players) == 1:
+                candidate = best_players[0]
+                if current_owner is None or candidate == current_owner:
+                    new_owner = candidate
+                    new_length = best_length
+                else:
+                    if best_length > current_length:
+                        new_owner = candidate
+                        new_length = best_length
+            else:
+                if (
+                    current_owner is not None
+                    and current_owner in best_players
+                    and current_length >= 5
+                ):
+                    new_owner = current_owner
+                    new_length = current_length
+                else:
+                    new_owner = None
+                    new_length = 0
+
+        previous_owner = self.longest_road_owner
+        if previous_owner != new_owner:
+            if previous_owner is not None:
+                players[previous_owner].victory_points -= 2
+            if new_owner is not None:
+                players[new_owner].victory_points += 2
+
+        new_state_fields["longest_road_owner"] = new_owner
+        new_state_fields["longest_road_length"] = new_length if new_owner is not None else 0
+
+    def _apply_largest_army_update(
+        self,
+        new_state_fields: Dict[str, object],
+        players: List[Player],
+    ) -> None:
+        """Recalcule la plus grande armée et met à jour les points."""
+
+        counts = {
+            player.player_id: player.played_dev_cards.get("KNIGHT", 0)
+            for player in players
+        }
+        best_count = max(counts.values(), default=0)
+        best_players = [
+            player_id for player_id, count in counts.items() if count == best_count
+        ]
+
+        current_owner = self.largest_army_owner
+        current_size = counts.get(current_owner, 0) if current_owner is not None else 0
+        new_owner = current_owner
+        new_size = current_size
+
+        if best_count < 3:
+            new_owner = None
+            new_size = 0
+        else:
+            if len(best_players) == 1:
+                candidate = best_players[0]
+                if current_owner is None or candidate == current_owner:
+                    new_owner = candidate
+                    new_size = best_count
+                else:
+                    if best_count > current_size:
+                        new_owner = candidate
+                        new_size = best_count
+            else:
+                if (
+                    current_owner is not None
+                    and current_owner in best_players
+                    and current_size >= 3
+                ):
+                    new_owner = current_owner
+                    new_size = current_size
+                else:
+                    new_owner = None
+                    new_size = 0
+
+        previous_owner = self.largest_army_owner
+        if previous_owner != new_owner:
+            if previous_owner is not None:
+                players[previous_owner].victory_points -= 2
+            if new_owner is not None:
+                players[new_owner].victory_points += 2
+
+        new_state_fields["largest_army_owner"] = new_owner
+        new_state_fields["largest_army_size"] = new_size if new_owner is not None else 0
+
+    @staticmethod
+    def _vertex_owner_map(players: List[Player]) -> Dict[int, int]:
+        """Associe chaque sommet occupé à son propriétaire."""
+
+        owner_map: Dict[int, int] = {}
+        for player in players:
+            for vertex_id in player.settlements:
+                owner_map[vertex_id] = player.player_id
+            for vertex_id in player.cities:
+                owner_map[vertex_id] = player.player_id
+        return owner_map
+
+    def _longest_road_length_for_player(
+        self,
+        board: Board,
+        player: Player,
+        vertex_owner: Dict[int, int],
+    ) -> int:
+        """Calcule la longueur maximale de route pour un joueur."""
+
+        roads = set(player.roads)
+        if not roads:
+            return 0
+
+        adjacency_by_vertex: Dict[int, List[int]] = defaultdict(list)
+        for edge_id in roads:
+            edge = board.edges.get(edge_id)
+            if edge is None:
+                continue
+            for vertex_id in edge.vertices:
+                adjacency_by_vertex[vertex_id].append(edge_id)
+
+        neighbors: Dict[int, Set[int]] = {edge_id: set() for edge_id in roads}
+        for vertex_id, edges_at_vertex in adjacency_by_vertex.items():
+            owner = vertex_owner.get(vertex_id)
+            if owner is not None and owner != player.player_id:
+                continue
+            if len(edges_at_vertex) < 2:
+                continue
+            for edge_a, edge_b in combinations(edges_at_vertex, 2):
+                neighbors[edge_a].add(edge_b)
+                neighbors[edge_b].add(edge_a)
+
+        best = 0
+        visited: Set[int] = set()
+
+        def dfs(edge_id: int) -> None:
+            nonlocal best
+            visited.add(edge_id)
+            best = max(best, len(visited))
+            for neighbor in neighbors[edge_id]:
+                if neighbor in visited:
+                    continue
+                dfs(neighbor)
+            visited.remove(edge_id)
+
+        for edge_id in roads:
+            dfs(edge_id)
+
+        return best
 
     def _edge_is_occupied(self, edge_id: int) -> bool:
         """Indique si une arête est déjà occupée par une route."""
