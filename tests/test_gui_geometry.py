@@ -1,13 +1,14 @@
 import math
 
 from catan.engine.board import Board
+from catan.gui.geometry import BoardGeometry
 
-# Tests écrits avant implémentation (TDD) pour `catan.gui.h2h.geometry.BoardGeometry`.
+# Tests écrits avant implémentation (TDD) pour `catan.gui.geometry.BoardGeometry`.
 
 
 def test_board_geometry_margin_alignment() -> None:
     board = Board.standard()
-    geometry = BoardGeometry(board, hex_radius=80.0, margin=24.0)  # type: ignore[name-defined]
+    geometry = BoardGeometry(board, hex_radius=80.0, margin=24.0)
 
     positions = [geometry.vertex_position(vertex_id) for vertex_id in board.vertices.keys()]
 
@@ -21,7 +22,7 @@ def test_board_geometry_margin_alignment() -> None:
 def test_board_geometry_relative_distance_scaling() -> None:
     board = Board.standard()
     radius = 70.0
-    geometry = BoardGeometry(board, hex_radius=radius, margin=20.0)  # type: ignore[name-defined]
+    geometry = BoardGeometry(board, hex_radius=radius, margin=20.0)
 
     vertex_a = board.vertices[0].position
     vertex_b = board.vertices[1].position
@@ -37,7 +38,7 @@ def test_board_geometry_surface_size_matches_bounds() -> None:
     board = Board.standard()
     radius = 90.0
     margin = 30.0
-    geometry = BoardGeometry(board, hex_radius=radius, margin=margin)  # type: ignore[name-defined]
+    geometry = BoardGeometry(board, hex_radius=radius, margin=margin)
 
     width, height = geometry.surface_size
 

@@ -62,3 +62,14 @@ pip install -r requirements.txt
 - Activer le venv: `source venv/bin/activate`
 - Lancer: `pytest -q`
 - Avec couverture: `pytest --cov=catan tests/`
+- Tests GUI (headless): `SDL_VIDEODRIVER=dummy pytest tests/test_gui_*.py`
+
+## Démo GUI (GUI-002)
+Pour tester visuellement le rendu du plateau et des pièces :
+
+```bash
+source venv/bin/activate
+python3 demo_gui.py
+```
+
+Le script affiche le plateau standard avec quelques pièces de test. Appuyez sur ESC ou Q pour quitter.

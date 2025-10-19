@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-19T18:54:02Z
+last_updated: 2025-10-19T21:35:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 59
-  pending: 32
+  pending: 31
   in_progress: 0
-  completed: 23
+  completed: 24
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -286,11 +286,19 @@ sections:
           2025-10-19: Toolkit validé → pygame 2.x pour MVP H2H. Rationale documentée dans docs/gui-h2h.md (section "Toolkit et stratégie"), tests smoke headless prévus.
       - id: GUI-002
         title: Rendu du plateau et pièces
-        status: pending
+        status: completed
         priority: P1
         dependencies: [ENG-001]
         acceptance_criteria:
           - "Hex, numéros, ports, routes/colonies/villes"
+        notes: |
+          2025-10-19T21:30Z: Implémentation terminée
+          - Module catan.gui.renderer créé avec BoardRenderer (rendu hexagones, numéros, ports, pièces)
+          - Module catan.gui.geometry créé avec BoardGeometry (transformations coordonnées logiques -> écran)
+          - Tests smoke headless (tests/test_gui_smoke.py): 7 tests validant init pygame, rendu plateau/pièces
+          - Tests géométrie (tests/test_gui_geometry.py): 3 tests validant marges, scaling, bounds
+          - Script démo visuel (demo_gui.py) pour validation interactive
+          - Tous les tests passent (100/100)
       - id: GUI-003
         title: Setup initial (placements)
         status: pending
