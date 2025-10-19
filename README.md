@@ -34,6 +34,11 @@ Aucun code applicatif n’est encore ajouté volontairement. L’objectif est de
 ## Docs
 - Vue d’ensemble: `docs/overview.md`
 - Règles et invariants: `docs/specs.md`
+- Architecture moteur/sim/GUI/RL: `docs/architecture.md`
+- Schémas de données (state/action/observation): `docs/schemas.md`
+- UX GUI H2H (flux setup -> victoire): `docs/gui-h2h.md`
+- Objectifs RL et cibles de performance: `docs/rl-objectives.md`
+- Étude catanatron (licence, mapping): `docs/catanatron-study.md`
 
 ## Installation et environnement virtuel
 

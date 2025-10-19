@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-18T08:05:00Z
+last_updated: 2025-10-19T15:24:42Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 57
-  pending: 41
+  pending: 39
   in_progress: 0
-  completed: 14
+  completed: 16
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -49,20 +49,24 @@ sections:
           - "Invariants formalisés (ex: coûts, limites, conditions de vol/défausse)"
       - id: DOC-003
         title: UX GUI (flux et écrans)
-        status: pending
+        status: completed
         priority: P1
         dependencies: [DOC-001]
         acceptance_criteria:
           - "Flux complet d'une partie H2H (setup -> fin)"
           - "Actions GUI mappées aux règles"
+        notes: |
+          2025-10-19: Documentation GUI H2H (docs/gui-h2h.md) ajoutée avec flux setup -> victoire et mapping actions/moteur.
       - id: DOC-004
         title: Objectifs RL + métriques
-        status: pending
+        status: completed
         priority: P1
         dependencies: [DOC-001]
         acceptance_criteria:
           - "KPIs: winrate vs baseline, ELO, points/100 tours"
           - "Cibles de perf simulation (jeux/s)"
+        notes: |
+          2025-10-19: Objectifs RL détaillés dans docs/rl-objectives.md (KPIs, ELO, throughput, cadence évaluation).
       - id: DOC-005
         title: Architecture (engine, sim, GUI, RL)
         status: completed
