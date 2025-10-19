@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-19T23:30:00Z
+last_updated: 2025-10-20T09:30:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 59
-  pending: 28
+  pending: 27
   in_progress: 0
-  completed: 27
+  completed: 28
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -335,11 +335,18 @@ sections:
           - Tous les tests passent (133/133 incluant tests existants)
       - id: GUI-005
         title: Commerce (banque/ports, 1v1 trade)
-        status: pending
+        status: completed
         priority: P2
         dependencies: [ENG-007, ENG-008]
         acceptance_criteria:
           - "UI claire pour offres et confirmations"
+        notes: |
+          2025-10-20T09:15Z: Implémentation terminée
+          - Module catan.gui.trade_controller.TradeController (banque + joueur↔joueur)
+          - Méthodes get_bank_trade_rates/get_legal_bank_trades/handle_bank_trade
+          - Gestion offres, acceptation/refus (get_pending_trade/can_accept/handle_*)
+          - Tests unitaires (tests/test_gui_trade_controller.py): 10 cas couvrant banque/ports/offres/réponses
+          - Commande: ./venv/bin/python -m pytest tests/test_gui_trade_controller.py -q (verts)
       - id: GUI-006
         title: Construction et achats
         status: completed
