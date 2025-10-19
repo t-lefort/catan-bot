@@ -6,6 +6,13 @@
 - Conserver une séparation stricte entre présentation et logique : toute action utilisateur se traduit par une commande envoyée au `GameService` qui délègue au moteur (`catan.engine`).
 - Favoriser la lisibilité en situation 1v1 : informations essentielles visibles en permanence (mains, titres, historique), overlays temporaires pour les étapes bloquantes (défausse, vol).
 
+## Toolkit et stratégie d'implémentation
+- **Toolkit retenu : `pygame` 2.x.** Choisi pour sa légèreté, sa portabilité (macOS/Linux/Windows sans runtime supplémentaire) et sa boucle d'évènements explicite, compatible avec les besoins temps réel du plateau (highlight, overlays).
+- **Critères de performance.** `pygame` permet de maîtriser finement le rendu 2D (blitting, surfaces pré-rendues) tout en restant suffisant pour les exigences H2H; aucun binding natif lourd n'est requis.
+- **Séparation stricte.** La GUI restera un mince client : `pygame` gère l'affichage/inputs, tandis que `catan.app.GameService` orchestre l'état et publie les évènements via un `EventBus`.
+- **Thème.** Palette sobre (fond bleu/gris > rappel plateau classique), assets vectoriels générés à partir des coordonnées du moteur pour garantir la cohérence géométrique décrite dans `docs/architecture.md`.
+- **Tests smoke.** Les tests automatisés utiliseront le mode headless (`SDL_VIDEODRIVER=dummy`) pour valider la construction des surfaces principales et la synchronisation avec le `GameService`.
+
 ## Structure d'écran proposée
 - **Zone plateau** (centre) : hexagones, numéros, ports, routes/colonies/villes avec surbrillance des positions jouables.
 - **Panneau actions** (droite) : boutons contextuels (lancer les dés, construire, commercer, jouer carte dev, terminer le tour).

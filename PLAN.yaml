@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-19T18:40:21Z
+last_updated: 2025-10-19T18:54:02Z
 owner: "Thomas + Agent"
 
 status_summary:
-  total: 57
-  pending: 33
+  total: 59
+  pending: 32
   in_progress: 0
-  completed: 20
+  completed: 23
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -241,17 +241,49 @@ sections:
           2025-10-19T18:45Z: Reprise — objectif implémenter sérialisation complète + RNG seedable (tests-first ENG-012).
           2025-10-19T19:08Z: Implémentation terminée — ajout module `catan.engine.serialize`, RNG seedable (GameState.rng_state), nouveaux tests `tests/test_serialization.py`, suite `python3 -m pytest` (80 tests) verte.
 
+  - id: APP
+    title: Services d'orchestration
+    description: "Couche application reliant moteur, GUI et simulation"
+    tasks:
+      - id: APP-001
+        title: EventBus + contrats de publication
+        status: completed
+        priority: P0
+        dependencies: [ENG-011]
+        acceptance_criteria:
+          - "API subscribe/unsubscribe + publication synchrone"
+          - "Tests unitaires headless couvrant la diffusion"
+          - "Documentation des évènements disponibles"
+        notes: |
+          2025-10-19: Démarrage TDD — ajout tests `tests/test_game_service.py::test_event_bus_publish_and_unsubscribe`.
+          2025-10-19: Implémentation `catan.app.event_bus.EventBus` + publication synchrone validée (tests pytest).
+      - id: APP-002
+        title: GameService orchestration 1v1
+        status: completed
+        priority: P0
+        dependencies: [APP-001, ENG-011]
+        acceptance_criteria:
+          - "start_new_game() fournit un GameState seedable"
+          - "dispatch() valide/applique une action et publie ActionApplied"
+          - "legal_actions() synchronisé avec GameState"
+          - "Jeu terminé -> évènement GameEnded"
+        notes: |
+          2025-10-19: Tests en préparation (`tests/test_game_service.py`) avant implémentation.
+          2025-10-19: Implémentation `catan.app.game_service.GameService` + évènements (`GameStarted`, `ActionApplied`, `GameEnded`) avec couverture tests (4 cas).
+
   - id: GUI
     title: Interface graphique (H2H)
     description: "Jouabilité complète 2 humains sur une partie"
     tasks:
       - id: GUI-001
         title: Choix toolkit (Tkinter/PyQt) + thème
-        status: pending
+        status: completed
         priority: P1
         dependencies: [DOC-003]
         acceptance_criteria:
           - "Toolkit validé, critères portabilité/perf"
+        notes: |
+          2025-10-19: Toolkit validé → pygame 2.x pour MVP H2H. Rationale documentée dans docs/gui-h2h.md (section "Toolkit et stratégie"), tests smoke headless prévus.
       - id: GUI-002
         title: Rendu du plateau et pièces
         status: pending
