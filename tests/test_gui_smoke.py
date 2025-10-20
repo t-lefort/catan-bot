@@ -114,3 +114,21 @@ def test_hex_vertices_computed(headless_pygame, test_board):
     for tile_id in test_board.tiles:
         assert tile_id in renderer._hex_coords
         assert len(renderer._hex_coords[tile_id]) == 6
+
+
+def test_get_tile_at_position_returns_tile(headless_pygame, test_board):
+    """Détecter la tuile cliquée doit renvoyer l'identifiant attendu."""
+
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    renderer = BoardRenderer(screen, test_board)
+
+    # Utiliser le centre du désert (tile_id=0) pour valider la détection
+    vertices = renderer._hex_coords[0]
+    center_x = sum(v[0] for v in vertices) / len(vertices)
+    center_y = sum(v[1] for v in vertices) / len(vertices)
+
+    tile_id = renderer.get_tile_at_position((center_x, center_y))
+    assert tile_id == 0
+
+    # Un clic loin du plateau doit retourner None
+    assert renderer.get_tile_at_position((0, 0)) is None

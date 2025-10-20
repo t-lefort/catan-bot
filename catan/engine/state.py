@@ -480,6 +480,8 @@ class GameState:
                 for player in self.players:
                     if vertex_id in player.settlements or vertex_id in player.cities:
                         return False
+                if not self._vertex_respects_distance_rule(vertex_id):
+                    return False
                 # Pendant setup, on attend une colonie seulement si pas en attente de route
                 return not self._waiting_for_road
 

@@ -45,6 +45,7 @@ COLOR_LUMBER = (80, 150, 60)
 COLOR_ROBBER = (50, 50, 50)
 COLOR_NUMBER = (255, 255, 255)
 COLOR_NUMBER_RED = (255, 100, 100)
+ROBBER_OFFSET_Y = 22
 
 # Couleurs joueurs
 COLOR_PLAYER_0 = (30, 100, 200)  # Bleu
@@ -58,6 +59,7 @@ COLOR_CITY = (255, 255, 255)
 # Couleurs pour la surbrillance (setup/interactions)
 COLOR_HIGHLIGHT_VERTEX = (100, 255, 100, 180)  # Vert semi-transparent
 COLOR_HIGHLIGHT_EDGE = (100, 255, 100, 180)    # Vert semi-transparent
+COLOR_HIGHLIGHT_TILE = (255, 255, 120, 90)     # Jaune clair semi-transparent
 
 # Tailles pièces
 ROAD_WIDTH = 6
@@ -102,6 +104,10 @@ class BoardRenderer:
 
         # Font for numbers (lazy init on first render)
         self._font: Optional[pygame.font.Font] = None
+
+    def update_board(self, board: Board) -> None:
+        """Met à jour le plateau rendu (utile pour déplacement du voleur)."""
+        self.board = board
 
     def _precompute_coordinates(self) -> None:
         """Precompute screen coordinates for all hexagons and vertices.
@@ -152,6 +158,8 @@ class BoardRenderer:
         """Render the board: hexes, numbers, ports."""
         for tile_id, tile in self.board.tiles.items():
             vertices = self._hex_coords[tile_id]
+            center_x = sum(v[0] for v in vertices) // 6
+            center_y = sum(v[1] for v in vertices) // 6
 
             # Fill hex with resource color
             color = self._RESOURCE_COLORS.get(tile.resource, COLOR_DESERT)
@@ -162,9 +170,6 @@ class BoardRenderer:
 
             # Draw number (if not desert)
             if tile.pip is not None:
-                center_x = sum(v[0] for v in vertices) // 6
-                center_y = sum(v[1] for v in vertices) // 6
-
                 # Draw white circle background for better readability
                 pygame.draw.circle(self.screen, (255, 255, 255), (center_x, center_y), 16, width=0)
                 pygame.draw.circle(self.screen, (0, 0, 0), (center_x, center_y), 16, width=2)
@@ -177,14 +182,13 @@ class BoardRenderer:
 
             # Draw robber if present
             if tile.has_robber:
-                center_x = sum(v[0] for v in vertices) // 6
-                center_y = sum(v[1] for v in vertices) // 6
+                robber_center = (center_x, center_y + ROBBER_OFFSET_Y)
                 pygame.draw.circle(
-                    self.screen, COLOR_ROBBER, (center_x, center_y), 15, width=0
+                    self.screen, COLOR_ROBBER, robber_center, 15, width=0
                 )
                 # Robber outline
                 pygame.draw.circle(
-                    self.screen, (200, 200, 200), (center_x, center_y), 15, width=2
+                    self.screen, (200, 200, 200), robber_center, 15, width=2
                 )
 
         # Draw ports (simple markers on edges)
@@ -393,6 +397,66 @@ class BoardRenderer:
                 return vertex_id
 
         return None
+
+    def get_tile_at_position(self, pos: Tuple[float, float]) -> Optional[int]:
+        """Return the tile ID containing the given position, if any."""
+
+        x, y = pos
+
+        for tile_id, vertices in self._hex_coords.items():
+            if self._point_in_polygon(x, y, vertices):
+                return tile_id
+
+        return None
+
+    def render_highlighted_tiles(self, tile_ids: Set[int]) -> None:
+        """Render highlighted tiles (e.g. for robber selection)."""
+
+        if not tile_ids:
+            return
+
+        for tile_id in tile_ids:
+            vertices = self._hex_coords.get(tile_id)
+            if not vertices:
+                continue
+
+            min_x = min(v[0] for v in vertices)
+            min_y = min(v[1] for v in vertices)
+            max_x = max(v[0] for v in vertices)
+            max_y = max(v[1] for v in vertices)
+
+            width = int(max_x - min_x) + 1
+            height = int(max_y - min_y) + 1
+            if width <= 0 or height <= 0:
+                continue
+
+            surf = pygame.Surface((width, height), pygame.SRCALPHA)
+            local_vertices = [(vx - min_x, vy - min_y) for vx, vy in vertices]
+            pygame.draw.polygon(surf, COLOR_HIGHLIGHT_TILE, local_vertices)
+            self.screen.blit(surf, (min_x, min_y))
+
+    @staticmethod
+    def _point_in_polygon(x: float, y: float, vertices: List[Tuple[int, int]]) -> bool:
+        """Return True if point is inside polygon defined by vertices."""
+
+        inside = False
+        n = len(vertices)
+        if n < 3:
+            return False
+
+        j = n - 1
+        for i in range(n):
+            xi, yi = vertices[i]
+            xj, yj = vertices[j]
+
+            intersects = ((yi > y) != (yj > y)) and (
+                x < (xj - xi) * (y - yi) / ((yj - yi) or 1e-9) + xi
+            )
+            if intersects:
+                inside = not inside
+            j = i
+
+        return inside
 
     def get_edge_at_position(self, pos: Tuple[int, int]) -> Optional[int]:
         """Find edge ID at given screen position.

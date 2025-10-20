@@ -16,22 +16,23 @@ L'objectif est de permettre à la fois:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Set
+from typing import Dict, Optional, Set, Tuple
 
 import pygame
 
 from catan.app.game_service import GameService
 from catan.engine.actions import EndTurn
-from catan.engine.state import GameState, SetupPhase, TurnSubPhase
+from catan.engine.state import GameState, SetupPhase, TurnSubPhase, RESOURCE_TYPES
 from catan.gui.construction_controller import ConstructionController
 from catan.gui.development_controller import DevelopmentController
 from catan.gui.hud_controller import HUDController
+from catan.gui.hud_controller import PlayerPanel
 from catan.gui.renderer import BoardRenderer
 from catan.gui.setup_controller import SetupController
 from catan.gui.trade_controller import TradeController
 from catan.gui.turn_controller import TurnController
 
-__all__ = ["ButtonState", "UIState", "CatanH2HApp"]
+__all__ = ["ButtonState", "UIState", "DiscardPrompt", "CatanH2HApp"]
 
 
 @dataclass(frozen=True)
@@ -52,7 +53,25 @@ class UIState:
     highlight_vertices: Set[int]
     highlight_edges: Set[int]
     highlight_tiles: Set[int]
+    last_dice_roll: Optional[int]
+    dice_rolled_this_turn: bool
+    player_panels: Tuple[PlayerPanel, ...]
+    discard_prompt: Optional["DiscardPrompt"]
     buttons: Dict[str, ButtonState]
+
+
+@dataclass(frozen=True)
+class DiscardPrompt:
+    """Informations pour le panneau de défausse."""
+
+    player_id: int
+    player_name: str
+    required: int
+    remaining: int
+    selection: Dict[str, int]
+    hand: Dict[str, int]
+    can_confirm: bool
+    resource_order: Tuple[str, ...]
 
 
 class CatanH2HApp:
@@ -86,6 +105,9 @@ class CatanH2HApp:
         self.hud_controller: Optional[HUDController] = None
 
         self.mode: str = "setup"
+        self._discard_selection: Dict[str, int] = {}
+        self._discard_required: int = 0
+        self._discard_player_id: Optional[int] = None
 
     # ------------------------------------------------------------------
     # Initialisation & synchronisation
@@ -120,6 +142,9 @@ class CatanH2HApp:
         self.hud_controller = HUDController(self.game_service, self.screen)
 
         self.mode = "setup"
+        self._discard_selection = {}
+        self._discard_required = 0
+        self._discard_player_id = None
         self.refresh_state()
 
     @property
@@ -153,13 +178,41 @@ class CatanH2HApp:
         self.trade_controller.refresh_state()
         assert self.hud_controller is not None
         self.hud_controller.refresh_state()
+        if self._board_renderer is not None:
+            self._board_renderer.update_board(self.state.board)
 
         if self.state.phase in (SetupPhase.SETUP_ROUND_1, SetupPhase.SETUP_ROUND_2):
             self.mode = "setup"
             return
 
-        # En phase PLAY — ajuster le mode selon les sous-phases forcées
         assert self.turn_controller is not None
+
+        if self.turn_controller.is_in_discard_phase():
+            requirements = self.turn_controller.get_discard_requirements()
+            current_id = self.state.current_player_id
+            required = requirements.get(current_id)
+            if required:
+                if (
+                    self._discard_player_id != current_id
+                    or self._discard_required != required
+                ):
+                    self._discard_selection = {}
+                self._discard_player_id = current_id
+                self._discard_required = required
+                self.mode = "discard"
+            else:
+                self.mode = "discard_wait"
+                self._discard_selection = {}
+                self._discard_player_id = None
+                self._discard_required = 0
+            return
+
+        # Reset discard state when leaving the phase
+        self._discard_selection = {}
+        self._discard_player_id = None
+        self._discard_required = 0
+
+        # En phase PLAY — ajuster le mode selon les sous-phases forcées
         if self.turn_controller.is_in_robber_move_phase():
             self.mode = "move_robber"
             return
@@ -167,7 +220,7 @@ class CatanH2HApp:
         if self.mode == "setup":
             # Transition automatique vers le mode idle une fois le setup terminé
             self.mode = "idle"
-        elif self.mode == "move_robber" and not self.turn_controller.is_in_robber_move_phase():
+        elif self.mode in {"move_robber", "discard", "discard_wait"} and not self.turn_controller.is_in_robber_move_phase():
             self.mode = "idle"
 
     # ------------------------------------------------------------------
@@ -209,6 +262,8 @@ class CatanH2HApp:
             return self._enter_build_mode("build_city")
 
         if action == "cancel":
+            if self.mode == "discard":
+                return self.reset_discard_selection()
             self.mode = "idle" if self.state.phase == SetupPhase.PLAY else "setup"
             return True
 
@@ -299,11 +354,76 @@ class CatanH2HApp:
         if tile_id not in legal_tiles:
             return False
 
+        if steal_from is None:
+            stealable = self.turn_controller.get_stealable_players(tile_id)
+            if len(stealable) == 1:
+                steal_from = next(iter(stealable))
+
         result = self.turn_controller.handle_robber_move(tile_id, steal_from=steal_from)
         if result:
             self.mode = "idle"
             self.refresh_state()
         return result
+
+    # ------------------------------------------------------------------
+    # Gestion de la défausse (voleur)
+    # ------------------------------------------------------------------
+
+    def adjust_discard_selection(self, resource: str, delta: int) -> bool:
+        if self.mode != "discard":
+            return False
+        if resource not in RESOURCE_TYPES:
+            return False
+        if delta == 0:
+            return False
+
+        player = self.state.players[self.state.current_player_id]
+        current_amount = self._discard_selection.get(resource, 0)
+        available = player.resources.get(resource, 0)
+        required = self._discard_required
+        total_selected = sum(self._discard_selection.values())
+
+        if delta > 0:
+            allowed = min(delta, available - current_amount, required - total_selected)
+            if allowed <= 0:
+                return False
+            self._discard_selection[resource] = current_amount + allowed
+            return True
+
+        removal = min(-delta, current_amount)
+        if removal <= 0:
+            return False
+        new_value = current_amount - removal
+        if new_value > 0:
+            self._discard_selection[resource] = new_value
+        else:
+            self._discard_selection.pop(resource, None)
+        return True
+
+    def reset_discard_selection(self) -> bool:
+        if self.mode != "discard":
+            return False
+        if not self._discard_selection:
+            return False
+        self._discard_selection = {}
+        return True
+
+    def confirm_discard_selection(self) -> bool:
+        if self.mode != "discard":
+            return False
+        if sum(self._discard_selection.values()) != self._discard_required:
+            return False
+        assert self.turn_controller is not None
+        selection = dict(self._discard_selection)
+        success = self.turn_controller.handle_discard(
+            self.state.current_player_id, selection
+        )
+        if success:
+            self._discard_selection = {}
+            self._discard_player_id = None
+            self._discard_required = 0
+            self.refresh_state()
+        return success
 
     # ------------------------------------------------------------------
     # Construction de l'état UI
@@ -338,6 +458,25 @@ class CatanH2HApp:
             highlight_tiles = set(self.turn_controller.get_legal_robber_tiles())
 
         buttons = self._build_buttons()
+        assert self.hud_controller is not None
+        player_panels = tuple(self.hud_controller.get_player_panels())
+
+        discard_prompt: Optional[DiscardPrompt] = None
+        if self.mode == "discard" and self._discard_player_id is not None:
+            player = self.state.players[self._discard_player_id]
+            required = self._discard_required
+            selected_total = sum(self._discard_selection.values())
+            remaining = max(0, required - selected_total)
+            discard_prompt = DiscardPrompt(
+                player_id=player.player_id,
+                player_name=player.name,
+                required=required,
+                remaining=remaining,
+                selection=dict(self._discard_selection),
+                hand=dict(player.resources),
+                can_confirm=remaining == 0 and required > 0,
+                resource_order=RESOURCE_TYPES,
+            )
 
         return UIState(
             mode=self.mode,
@@ -346,6 +485,10 @@ class CatanH2HApp:
             highlight_vertices=highlight_vertices,
             highlight_edges=highlight_edges,
             highlight_tiles=highlight_tiles,
+            last_dice_roll=self.state.last_dice_roll,
+            dice_rolled_this_turn=self.state.dice_rolled_this_turn,
+            player_panels=player_panels,
+            discard_prompt=discard_prompt,
             buttons=buttons,
         )
 
@@ -366,6 +509,11 @@ class CatanH2HApp:
             return f"{current_player.name} — Sélectionnez une ville à améliorer"
         if self.mode == "move_robber":
             return f"{current_player.name} — Déplacez le voleur"
+        if self.mode == "discard":
+            remaining = max(0, self._discard_required - sum(self._discard_selection.values()))
+            return f"{current_player.name} — Défaussez {remaining} carte(s) (cliquez sur +/-)"
+        if self.mode == "discard_wait":
+            return self.turn_controller.get_instructions()
 
         if not self.state.dice_rolled_this_turn:
             return f"{current_player.name} — Lancez les dés"
@@ -381,13 +529,16 @@ class CatanH2HApp:
         can_roll = (
             self.state.phase == SetupPhase.PLAY
             and self.turn_controller.can_roll_dice()
-            and self.mode not in ("build_road", "build_settlement", "build_city", "move_robber")
+            and self.mode not in ("build_road", "build_settlement", "build_city", "move_robber", "discard", "discard_wait")
         )
 
         buttons["roll_dice"] = ButtonState("Lancer les dés", can_roll)
 
         legal_actions = self.state.legal_actions()
-        can_end_turn = EndTurn() in legal_actions and self.mode not in ("setup", "move_robber")
+        can_end_turn = (
+            EndTurn() in legal_actions
+            and self.mode not in ("setup", "move_robber", "discard", "discard_wait")
+        )
         buttons["end_turn"] = ButtonState("Terminer le tour", can_end_turn)
 
         can_build_road = (
@@ -413,8 +564,8 @@ class CatanH2HApp:
 
         # Bouton d'annulation actif lorsqu'un mode temporaire est enclenché
         buttons["cancel"] = ButtonState(
-            "Annuler",
-            self.mode in {"build_road", "build_settlement", "build_city", "move_robber"},
+            "Réinitialiser" if self.mode == "discard" else "Annuler",
+            self.mode in {"build_road", "build_settlement", "build_city", "move_robber", "discard"},
         )
 
         return buttons

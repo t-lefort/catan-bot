@@ -152,6 +152,44 @@ class TestUserInteraction:
         result = controller.handle_edge_click(edge_id)
         assert result is True
 
+    def test_adjacent_settlement_positions_blocked(self, game_service, mock_screen):
+        """A settlement cannot be placed on a vertex adjacent to an existing settlement."""
+
+        controller = SetupController(game_service, mock_screen)
+
+        legal_actions = controller.state.legal_actions()
+        first_settlement_action = next(
+            a for a in legal_actions if isinstance(a, PlaceSettlement)
+        )
+        first_vertex = first_settlement_action.vertex_id
+
+        # Place the first settlement and its road
+        assert controller.handle_vertex_click(first_vertex)
+        controller.refresh_state()
+        legal_actions = controller.state.legal_actions()
+        first_road_action = next(a for a in legal_actions if isinstance(a, PlaceRoad))
+        assert controller.handle_edge_click(first_road_action.edge_id)
+        controller.refresh_state()
+
+        # It is now the other player's turn to place a settlement
+        adjacent_vertices = controller.state.board.vertices[first_vertex].edges
+        neighbor_ids = set()
+        for edge_id in adjacent_vertices:
+            edge = controller.state.board.edges[edge_id]
+            a, b = edge.vertices
+            neighbor_ids.add(a if b == first_vertex else b)
+
+        legal_actions = controller.state.legal_actions()
+        legal_vertices = {a.vertex_id for a in legal_actions if isinstance(a, PlaceSettlement)}
+
+        # No adjacent vertex should be present in the legal set
+        assert neighbor_ids.isdisjoint(legal_vertices)
+
+        # A direct click on an adjacent vertex must be ignored
+        illegal_vertex = next(iter(neighbor_ids))
+        result = controller.handle_vertex_click(illegal_vertex)
+        assert result is False
+
 
 class TestSetupProgression:
     """Test progression through setup phases."""

@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-20T10:05:00Z
+last_updated: 2025-10-20T13:34:50Z
 owner: "Thomas + Agent"
 
 status_summary:
-  total: 60
+  total: 62
   pending: 23
   in_progress: 0
-  completed: 32
+  completed: 34
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -418,6 +418,33 @@ sections:
           unifié (controllers + GameService) et exposer un point d'entrée interactif.
           2025-10-20T10:04Z: Tâche complétée — ajout catan.gui.app (UIState + CatanH2HApp),
           tests `tests/test_gui_app.py`, support EndTurn dans GameState et script `play_gui.py`.
+      - id: GUI-012
+        title: Corrections GUI (HUD/dés, voleur clic tuile)
+        status: completed
+        priority: P0
+        dependencies: [GUI-011]
+        acceptance_criteria:
+          - "Le modèle UI expose le dernier lancer de dés et les données HUD joueurs."
+          - "Le rendu de la boucle pygame affiche les mains/points et le dernier résultat."
+          - "La sélection de tuile pour déplacer le voleur fonctionne par clic (tests couvrant le flux)."
+        notes: |
+          2025-10-20T12:07Z: Ouverture de la tâche pour corriger les régressions observées
+          via play_gui.py (dés non affichés, HUD absent, clic voleur inactif).
+          2025-10-20T12:18Z: Implémentation terminée — UIState enrichi (dés + HUD), renderer
+          expose get_tile_at_position, boucle pygame affiche HUD/dés et gère le clic voleur.
+          Tests GUI étendus (ui_state, renderer) passent.
+      - id: GUI-013
+        title: Setup distance, voleur rendu et interface défausse
+        status: completed
+        priority: P0
+        dependencies: [GUI-012]
+        acceptance_criteria:
+          - "Impossible de placer des colonies adjacentes durant le setup."
+          - "Le voleur suit visuellement son déplacement et n'occulte plus les numéros."
+          - "Une interface interactive permet de sélectionner les cartes à défausser (variant >9)."
+        notes: |
+          2025-10-20T13:34Z: Corrections livrées — tests GUI renforcés (setup, discard, robber),
+          UIState enrichi (DiscardPrompt), boucle pygame rend panneau défausse et gère les clics.
 
   - id: SIM
     title: Simulation rapide (headless)
