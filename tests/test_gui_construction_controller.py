@@ -254,15 +254,40 @@ def test_handle_build_road_invalid_position(game_in_play):
 
 
 def test_handle_build_settlement_success(game_in_play):
-    """Test successful settlement building."""
+    """Test successful settlement building.
+
+    To build a new settlement during play phase, we need to:
+    1. Build roads to reach a position at distance from existing settlements
+    2. Then build the settlement at the new position
+    """
     controller, service, state = game_in_play
 
+    # First, build roads to create new legal settlement positions
+    roads_built = 0
+    max_roads = 3  # Try building up to 3 roads to reach a new position
+
+    for _ in range(max_roads):
+        legal_edges = controller.get_legal_road_positions()
+        if not legal_edges:
+            break
+
+        # Build a road
+        edge_id = next(iter(legal_edges))
+        controller.handle_build_road(edge_id)
+        roads_built += 1
+
+        # Check if we now have legal settlement positions
+        legal_vertices = controller.get_legal_settlement_positions()
+        if legal_vertices:
+            break
+
+    # Now try to build a settlement
     legal_vertices = controller.get_legal_settlement_positions()
     if not legal_vertices:
-        pytest.skip("No legal settlement positions available")
+        pytest.skip(f"No legal settlement positions available after building {roads_built} roads")
 
     vertex_id = next(iter(legal_vertices))
-    initial_resources = dict(state.players[0].resources)
+    initial_resources = dict(controller.state.players[0].resources)
 
     # Build settlement
     result = controller.handle_build_settlement(vertex_id)

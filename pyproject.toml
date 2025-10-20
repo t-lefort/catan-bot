@@ -32,6 +32,10 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+filterwarnings = [
+    "ignore::DeprecationWarning:pkg_resources",
+    "ignore:pkg_resources is deprecated:UserWarning:pygame.pkgdata",
+]
 
 [tool.black]
 line-length = 100
