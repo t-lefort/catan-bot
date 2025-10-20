@@ -69,3 +69,7 @@ Je crois que les IA marche mieux quand on type les variables, là il ne la pas f
 Le développement en suivant le plan a l'air de bien se dérouler, la première version de la GUI fonctionne beaucoup mieux qu'à l'essai d'avant.
 Il y a quand même pas mal de petit détail de règle qui n'étaient pas implémenté donc je lui demande au fur et à mesure, il faut que je pense à lui faire planifier avant de faire quand c'est une tâche qui n'était pas dans le plan.
 J'ai rapidement réussi à faire une partie complète, ce n'est pas encore parfait mais c'est pas mal !
+
+## Etape 16
+ChatGPT attaque la partie RL. J'ai fait coder l'encodage et j'ai demander à Claude de m'expliquer comment ça marche, ce qui fait un bon encodage et de commenter la façon de faire de ChatGPT. Comme je ne connais pas trop les algorithmes de RL autre que ceux utilisé dans notre TIPE, ça fait un bon exercice pour tester de dev un truc que je ne comprend pas parfaitement.
+Claude me suggère une bonne amélioration qui est d'encoder avec une vision ego-centrée pour éviter que l'agent ait à apprendre en fonction de sa position. Il implémente le changement directement

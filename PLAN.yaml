@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-20T15:10:00Z
+last_updated: 2025-10-20T13:18:43Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 66
-  pending: 23
+  pending: 21
   in_progress: 0
-  completed: 38
+  completed: 39
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -545,12 +545,15 @@ sections:
     tasks:
       - id: RL-001
         title: Encodage observation (état -> tenseurs)
-        status: pending
+        status: completed
         priority: P0
         dependencies: [DOC-006, SIM-001]
         acceptance_criteria:
           - "Taille fixe, normalisation, invariances (rotations si utile)"
           - "S'inspirer du schéma d'état de catanatron si applicable"
+        notes: |
+          2025-10-20T13:10Z: Démarrage implémentation ObservationTensor (tests-first sur `catan.rl.features`).
+          2025-10-20T13:18Z: Implémentation livrée (`catan.rl.features` + `tests/test_rl_features.py`), `python3 -m pytest -q` (201 tests) vert.
       - id: RL-002
         title: Espace d’actions + masquage
         status: pending
