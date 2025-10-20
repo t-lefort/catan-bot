@@ -151,13 +151,16 @@ class GameState:
         seed: int | None = None,
         dev_deck: List[str] | None = None,
         bank_resources: Dict[str, int] | None = None,
+        random_board: bool = False,
     ) -> "GameState":
-        """Crée un nouveau jeu 1v1 avec plateau standard.
+        """Crée un nouveau jeu 1v1 avec plateau standard ou aléatoire.
 
         Args:
             player_names: Noms des joueurs (par défaut ["Player 0", "Player 1"])
+            seed: Graine pour le RNG (deck, plateau aléatoire)
             dev_deck: Ordre initial des cartes de développement (optionnel)
             bank_resources: Inventaire initial de la banque (optionnel)
+            random_board: Si True, génère un plateau aléatoire (défaut: False)
 
         Returns:
             État initial en phase SETUP_ROUND_1
@@ -166,7 +169,7 @@ class GameState:
         if player_names is None:
             player_names = ["Player 0", "Player 1"]
 
-        board = Board.standard()
+        board = Board.random(seed) if random_board else Board.standard()
         players = [
             Player(player_id=i, name=name) for i, name in enumerate(player_names)
         ]

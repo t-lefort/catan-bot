@@ -38,6 +38,7 @@ class GameService:
         seed: int | None = None,
         dev_deck: Iterable[str] | None = None,
         bank_resources: Mapping[str, int] | None = None,
+        random_board: bool = False,
     ) -> GameState:
         """Initialise une nouvelle partie et publie l'évènement associé."""
 
@@ -46,6 +47,7 @@ class GameService:
             seed=seed,
             dev_deck=list(dev_deck) if dev_deck is not None else None,
             bank_resources=dict(bank_resources) if bank_resources is not None else None,
+            random_board=random_board,
         )
         self._state = state
         self._event_bus.publish(GameStartedEvent(state=state))

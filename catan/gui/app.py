@@ -33,7 +33,7 @@ from catan.gui.setup_controller import SetupController
 from catan.gui.trade_controller import TradeController
 from catan.gui.turn_controller import TurnController
 
-__all__ = ["ButtonState", "UIState", "DiscardPrompt", "CatanH2HApp"]
+__all__ = ["ButtonState", "UIState", "DiscardPrompt", "BankTradePrompt", "CatanH2HApp"]
 
 
 @dataclass(frozen=True)
@@ -58,6 +58,7 @@ class UIState:
     dice_rolled_this_turn: bool
     player_panels: Tuple[PlayerPanel, ...]
     discard_prompt: Optional["DiscardPrompt"]
+    bank_trade_prompt: Optional["BankTradePrompt"]
     buttons: Dict[str, ButtonState]
 
 
@@ -71,6 +72,19 @@ class DiscardPrompt:
     remaining: int
     selection: Dict[str, int]
     hand: Dict[str, int]
+    can_confirm: bool
+    resource_order: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BankTradePrompt:
+    """Informations pour le panneau d'échange banque."""
+
+    player_name: str
+    give_selection: Dict[str, int]
+    receive_selection: str | None
+    hand: Dict[str, int]
+    rates: Dict[str, int]
     can_confirm: bool
     resource_order: Tuple[str, ...]
 
@@ -109,6 +123,9 @@ class CatanH2HApp:
         self._discard_selection: Dict[str, int] = {}
         self._discard_required: int = 0
         self._discard_player_id: Optional[int] = None
+        self._bank_trade_give: Dict[str, int] = {}
+        self._bank_trade_receive: Optional[str] = None
+        self._road_building_edges: list[int] = []
 
     # ------------------------------------------------------------------
     # Initialisation & synchronisation
@@ -119,12 +136,14 @@ class CatanH2HApp:
         *,
         player_names: Optional[list[str]] = None,
         seed: Optional[int] = None,
+        random_board: bool = False,
     ) -> None:
         """Initialise une nouvelle partie et (ré)instancie les contrôleurs."""
 
         state = self.game_service.start_new_game(
             player_names=player_names or ["Bleu", "Orange"],
             seed=seed,
+            random_board=random_board,
         )
 
         if self.screen is None:
@@ -146,6 +165,9 @@ class CatanH2HApp:
         self._discard_selection = {}
         self._discard_required = 0
         self._discard_player_id = None
+        self._bank_trade_give = {}
+        self._bank_trade_receive = None
+        self._road_building_edges = []
         self.refresh_state()
 
     @property
@@ -275,6 +297,15 @@ class CatanH2HApp:
         if action == "cancel":
             if self.mode == "discard":
                 return self.reset_discard_selection()
+            if self.mode == "bank_trade":
+                self._bank_trade_give = {}
+                self._bank_trade_receive = None
+                self.mode = "idle"
+                return True
+            if self.mode == "select_road_building":
+                self._road_building_edges = []
+                self.mode = "idle"
+                return True
             self.mode = "idle" if self.state.phase == SetupPhase.PLAY else "setup"
             return True
 
@@ -316,54 +347,23 @@ class CatanH2HApp:
             return True
 
         if action == "play_road_building":
-            # Pour Road Building, passer en mode de sélection d'arêtes
+            # Passer en mode de sélection interactive pour Road Building
             assert self.development_controller is not None
             targets = self.development_controller.get_legal_road_building_targets()
             if not targets:
                 return False
-            # Pour l'instant, placer automatiquement les 2 premières routes légales
-            if targets:
-                if not self.development_controller.handle_play_road_building(targets[0]):
-                    return False
-                self.refresh_state()
-                return True
-            return False
+            self.mode = "select_road_building"
+            self._road_building_edges = []
+            return True
 
         if action == "bank_trade":
-            # Pour le commerce banque, effectuer le premier échange disponible
+            # Ouvrir l'interface de sélection d'échange banque
             assert self.trade_controller is not None
-            legal_trades = self.trade_controller.get_legal_bank_trades()
-            if not legal_trades:
+            if not self.trade_controller.get_legal_bank_trades():
                 return False
-            give_resource = kwargs.get("give_resource")
-            give_amount = kwargs.get("give_amount")
-            receive_resource = kwargs.get("receive_resource")
-            if give_resource is not None and give_amount is not None and receive_resource is not None:
-                try:
-                    give_amount_int = int(give_amount)
-                except (TypeError, ValueError):
-                    return False
-                if not self.trade_controller.handle_bank_trade(
-                    str(give_resource),
-                    give_amount_int,
-                    str(receive_resource),
-                ):
-                    return False
-                self.refresh_state()
-                return True
-
-            # Effectuer le premier échange légal (fallback pour compatibilité)
-            trade = legal_trades[0]
-            fallback_give_resource = list(trade.give.keys())[0]
-            fallback_give_amount = trade.give[fallback_give_resource]
-            fallback_receive_resource = list(trade.receive.keys())[0]
-            if not self.trade_controller.handle_bank_trade(
-                fallback_give_resource,
-                fallback_give_amount,
-                fallback_receive_resource,
-            ):
-                return False
-            self.refresh_state()
+            self.mode = "bank_trade"
+            self._bank_trade_give = {}
+            self._bank_trade_receive = None
             return True
 
         if action == "player_trade":
@@ -475,6 +475,43 @@ class CatanH2HApp:
                 self.refresh_state()
             return result
 
+        if self.mode == "select_road_building":
+            # Sélection des routes pour la carte Road Building
+            assert self.development_controller is not None
+
+            # Vérifier si cette arête est légale pour la construction
+            if edge_id in self._road_building_edges:
+                # Déjà sélectionnée, la retirer
+                self._road_building_edges.remove(edge_id)
+                return True
+
+            if len(self._road_building_edges) >= 2:
+                # Déjà 2 routes sélectionnées
+                return False
+
+            # Ajouter l'arête à la sélection
+            self._road_building_edges.append(edge_id)
+
+            # Si deux routes sont sélectionnées, confirmer
+            if len(self._road_building_edges) == 2:
+                # Vérifier que la combinaison est légale
+                targets = self.development_controller.get_legal_road_building_targets()
+                edges_tuple = tuple(sorted(self._road_building_edges))
+
+                if edges_tuple in targets:
+                    # Jouer la carte
+                    if self.development_controller.handle_play_road_building(self._road_building_edges):
+                        self._road_building_edges = []
+                        self.mode = "idle"
+                        self.refresh_state()
+                        return True
+                else:
+                    # Combinaison invalide, réinitialiser
+                    self._road_building_edges = []
+                    return False
+
+            return True
+
         return False
 
     def handle_board_tile_click(self, tile_id: int, *, steal_from: Optional[int] = None) -> bool:
@@ -496,6 +533,86 @@ class CatanH2HApp:
             self.mode = "idle"
             self.refresh_state()
         return result
+
+    # ------------------------------------------------------------------
+    # Gestion de l'échange banque
+    # ------------------------------------------------------------------
+
+    def adjust_bank_trade_give(self, resource: str, delta: int) -> bool:
+        """Ajuste la sélection de ressources à donner pour l'échange banque."""
+        if self.mode != "bank_trade":
+            return False
+        if resource not in RESOURCE_TYPES:
+            return False
+        if delta == 0:
+            return False
+
+        player = self.state.players[self.state.current_player_id]
+        current_amount = self._bank_trade_give.get(resource, 0)
+        available = player.resources.get(resource, 0)
+
+        if delta > 0:
+            allowed = min(delta, available - current_amount)
+            if allowed <= 0:
+                return False
+            self._bank_trade_give[resource] = current_amount + allowed
+            return True
+
+        removal = min(-delta, current_amount)
+        if removal <= 0:
+            return False
+        new_value = current_amount - removal
+        if new_value > 0:
+            self._bank_trade_give[resource] = new_value
+        else:
+            self._bank_trade_give.pop(resource, None)
+        return True
+
+    def select_bank_trade_receive(self, resource: str) -> bool:
+        """Sélectionne la ressource à recevoir pour l'échange banque."""
+        if self.mode != "bank_trade":
+            return False
+        if resource not in RESOURCE_TYPES:
+            return False
+        self._bank_trade_receive = resource
+        return True
+
+    def reset_bank_trade_selection(self) -> bool:
+        """Réinitialise la sélection d'échange banque."""
+        if self.mode != "bank_trade":
+            return False
+        self._bank_trade_give = {}
+        self._bank_trade_receive = None
+        return True
+
+    def confirm_bank_trade_selection(self) -> bool:
+        """Confirme et exécute l'échange banque sélectionné."""
+        if self.mode != "bank_trade":
+            return False
+        if not self._bank_trade_give or not self._bank_trade_receive:
+            return False
+
+        assert self.trade_controller is not None
+
+        # Calculer le montant à donner (doit correspondre au taux d'échange)
+        if len(self._bank_trade_give) != 1:
+            return False
+
+        give_resource = list(self._bank_trade_give.keys())[0]
+        give_amount = self._bank_trade_give[give_resource]
+
+        # Vérifier que l'échange est légal
+        success = self.trade_controller.handle_bank_trade(
+            give_resource, give_amount, self._bank_trade_receive
+        )
+
+        if success:
+            self._bank_trade_give = {}
+            self._bank_trade_receive = None
+            self.mode = "idle"
+            self.refresh_state()
+
+        return success
 
     # ------------------------------------------------------------------
     # Gestion de la défausse (voleur)
@@ -588,6 +705,15 @@ class CatanH2HApp:
         elif self.mode == "move_robber":
             assert self.turn_controller is not None
             highlight_tiles = set(self.turn_controller.get_legal_robber_tiles())
+        elif self.mode == "select_road_building":
+            # Pour Road Building, montrer toutes les positions légales pour les routes
+            assert self.development_controller is not None
+            all_legal_edges: Set[int] = set()
+            targets = self.development_controller.get_legal_road_building_targets()
+            for edge_pair in targets:
+                all_legal_edges.add(edge_pair[0])
+                all_legal_edges.add(edge_pair[1])
+            highlight_edges = all_legal_edges
 
         buttons = self._build_buttons()
         assert self.hud_controller is not None
@@ -610,6 +736,31 @@ class CatanH2HApp:
                 resource_order=RESOURCE_TYPES,
             )
 
+        bank_trade_prompt: Optional[BankTradePrompt] = None
+        if self.mode == "bank_trade":
+            player = self.state.players[self.state.current_player_id]
+            assert self.trade_controller is not None
+            rates = self.trade_controller.get_bank_trade_rates()
+
+            # Vérifier si l'échange est valide
+            can_confirm = False
+            if self._bank_trade_give and self._bank_trade_receive:
+                if len(self._bank_trade_give) == 1:
+                    give_resource = list(self._bank_trade_give.keys())[0]
+                    give_amount = self._bank_trade_give[give_resource]
+                    required_rate = rates.get(give_resource, 4)
+                    can_confirm = give_amount == required_rate
+
+            bank_trade_prompt = BankTradePrompt(
+                player_name=player.name,
+                give_selection=dict(self._bank_trade_give),
+                receive_selection=self._bank_trade_receive,
+                hand=dict(player.resources),
+                rates=rates,
+                can_confirm=can_confirm,
+                resource_order=RESOURCE_TYPES,
+            )
+
         return UIState(
             mode=self.mode,
             phase=self.state.phase,
@@ -621,6 +772,7 @@ class CatanH2HApp:
             dice_rolled_this_turn=self.state.dice_rolled_this_turn,
             player_panels=player_panels,
             discard_prompt=discard_prompt,
+            bank_trade_prompt=bank_trade_prompt,
             buttons=buttons,
         )
 
@@ -646,6 +798,19 @@ class CatanH2HApp:
             return f"{current_player.name} — Défaussez {remaining} carte(s) (cliquez sur +/-)"
         if self.mode == "discard_wait":
             return self.turn_controller.get_instructions()
+        if self.mode == "bank_trade":
+            if not self._bank_trade_give:
+                return f"{current_player.name} — Sélectionnez les ressources à donner"
+            if not self._bank_trade_receive:
+                return f"{current_player.name} — Sélectionnez la ressource à recevoir"
+            return f"{current_player.name} — Confirmez l'échange"
+        if self.mode == "select_road_building":
+            num_selected = len(self._road_building_edges)
+            if num_selected == 0:
+                return f"{current_player.name} — Sélectionnez la 1ère route (Construction de routes)"
+            elif num_selected == 1:
+                return f"{current_player.name} — Sélectionnez la 2ème route (Construction de routes)"
+            return f"{current_player.name} — Construction de routes"
 
         if not self.state.dice_rolled_this_turn:
             return f"{current_player.name} — Lancez les dés"
@@ -747,9 +912,19 @@ class CatanH2HApp:
         buttons["decline_trade"] = ButtonState("Refuser l'échange", can_decline_trade)
 
         # Bouton d'annulation actif lorsqu'un mode temporaire est enclenché
+        cancel_label = "Réinitialiser" if self.mode == "discard" else "Annuler"
         buttons["cancel"] = ButtonState(
-            "Réinitialiser" if self.mode == "discard" else "Annuler",
-            self.mode in {"build_road", "build_settlement", "build_city", "move_robber", "discard"},
+            cancel_label,
+            self.mode
+            in {
+                "build_road",
+                "build_settlement",
+                "build_city",
+                "move_robber",
+                "discard",
+                "bank_trade",
+                "select_road_building",
+            },
         )
 
         return buttons

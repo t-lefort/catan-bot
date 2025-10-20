@@ -235,7 +235,7 @@ def test_gui_allows_selecting_monopoly_resource(gui_app):
 
 
 def test_gui_bank_trade_uses_selected_resources(gui_app):
-    """Le commerce banque doit respecter les ressources choisies par l'utilisateur."""
+    """Le commerce banque doit respecter les ressources choisies par l'utilisateur via l'interface."""
 
     app = gui_app
     _complete_setup(app)
@@ -255,18 +255,26 @@ def test_gui_bank_trade_uses_selected_resources(gui_app):
     player.resources["WOOL"] = wool_rate
     app.refresh_state()
 
-    assert app.trigger_action(
-        "bank_trade",
-        give_resource="WOOL",
-        give_amount=wool_rate,
-        receive_resource="ORE",
-    )
+    # Ouvrir l'interface d'échange banque
+    assert app.trigger_action("bank_trade")
+    assert app.mode == "bank_trade"
 
+    # Sélectionner les ressources à donner (WOOL selon le taux)
+    for _ in range(wool_rate):
+        assert app.adjust_bank_trade_give("WOOL", 1)
+
+    # Sélectionner la ressource à recevoir
+    assert app.select_bank_trade_receive("ORE")
+
+    # Confirmer l'échange
+    assert app.confirm_bank_trade_selection()
+
+    # Vérifier que l'échange a été effectué
     updated_player = app.state.players[current_id]
-
     assert updated_player.resources["WOOL"] == 0
     assert updated_player.resources["ORE"] == 1
     assert updated_player.resources["BRICK"] == brick_rate
+    assert app.mode == "idle"
 
 
 def test_discard_flow_selection_and_confirmation(gui_app):
@@ -388,3 +396,43 @@ def test_discard_requirements_both_players(gui_app):
     expected_p1 = sum(app.state.players[1].resources.values()) // 2
     assert prompt.required == expected_p1
     assert prompt.remaining == expected_p1
+
+
+def test_road_building_interactive_selection(gui_app):
+    """La carte Road Building doit permettre au joueur de choisir où placer les routes."""
+
+    app = gui_app
+    _complete_setup(app)
+
+    assert app.trigger_action("roll_dice", forced_value=4)
+
+    current_id = app.state.current_player_id
+    player = app.state.players[current_id]
+
+    # Donner une carte Road Building au joueur
+    player.dev_cards["ROAD_BUILDING"] = 1
+    player.new_dev_cards["ROAD_BUILDING"] = 0
+    app.refresh_state()
+
+    # Déclencher l'action Road Building
+    assert app.trigger_action("play_road_building")
+    assert app.mode == "select_road_building"
+
+    # Obtenir les cibles légales
+    targets = app.development_controller.get_legal_road_building_targets()
+    assert len(targets) > 0
+
+    # Sélectionner la première cible
+    edge1, edge2 = targets[0]
+
+    # Cliquer sur la première arête
+    assert app.handle_board_edge_click(edge1)
+    assert len(app._road_building_edges) == 1
+
+    # Cliquer sur la deuxième arête
+    assert app.handle_board_edge_click(edge2)
+
+    # Vérifier que les routes ont été placées et que le mode est revenu à idle
+    assert app.mode == "idle"
+    updated_player = app.state.players[current_id]
+    assert updated_player.dev_cards["ROAD_BUILDING"] == 0
