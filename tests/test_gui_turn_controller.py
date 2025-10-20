@@ -147,10 +147,13 @@ class TestTurnController:
         # Force roll a 7
         controller.handle_roll_dice(forced_value=7)
 
-        # Player 0 should need to discard 6 cards (12 // 2 per game rules)
+        # Calculer le nombre réel de cartes après le lancer
+        total_cards = sum(controller.state.players[0].resources.values())
+        expected_discard = total_cards // 2
+
         requirements = controller.get_discard_requirements()
         assert 0 in requirements
-        assert requirements[0] == 6  # 12 // 2 = 6
+        assert requirements[0] == expected_discard
 
     def test_is_in_discard_phase(self, game_service, screen):
         """Test detection of discard phase."""

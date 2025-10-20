@@ -11,7 +11,7 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-20T13:34:50Z
+last_updated: 2025-10-20T13:49:17Z
 owner: "Thomas + Agent"
 
 status_summary:
@@ -445,6 +445,8 @@ sections:
         notes: |
           2025-10-20T13:34Z: Corrections livrées — tests GUI renforcés (setup, discard, robber),
           UIState enrichi (DiscardPrompt), boucle pygame rend panneau défausse et gère les clics.
+          2025-10-20T13:49Z: Bouton achat dev ajouté (binding D), calcul défausse fiabilisé (les
+          deux joueurs affichent désormais la bonne cible). Tests GUI app étendus.
 
   - id: SIM
     title: Simulation rapide (headless)

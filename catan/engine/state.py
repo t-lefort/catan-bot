@@ -1489,7 +1489,8 @@ class GameState:
         for player in players:
             total_cards = sum(player.resources.values())
             if total_cards > DISCARD_THRESHOLD:
-                requirements[player.player_id] = total_cards - DISCARD_THRESHOLD
+                # On doit défausser la moitié des cartes (arrondi vers le bas)
+                requirements[player.player_id] = total_cards // 2
         # Garantir un ordre déterministe (ID croissant)
         return dict(sorted(requirements.items()))
 

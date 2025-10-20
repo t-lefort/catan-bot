@@ -304,26 +304,29 @@ class TestRobberSevenResolution:
         new_state = state.apply_action(RollDice(forced_value=(3, 4)))
 
         assert new_state.turn_subphase == TurnSubPhase.ROBBER_DISCARD
-        assert new_state.pending_discards == {0: 4}
+        # Avec 13 cartes, le joueur doit défausser la moitié (13 // 2 = 6 cartes)
+        assert new_state.pending_discards == {0: 6}
         assert new_state.current_player_id == 0
         assert new_state.robber_roller_id == 0
 
     def test_discard_action_reduces_hand_and_advances_phase(self):
-        """La défausse ramène la main à 9 cartes puis passe à la phase déplacement."""
+        """La défausse réduit la main de moitié puis passe à la phase déplacement."""
         state = self._state_after_seven_with_pending_discard()
 
-        discard_action = DiscardResources(resources={"BRICK": 2, "LUMBER": 2})
+        # Le joueur a 13 cartes, il doit en défausser 6
+        discard_action = DiscardResources(resources={"BRICK": 3, "LUMBER": 2, "WOOL": 1})
         new_state = state.apply_action(discard_action)
 
         assert new_state.pending_discards == {}
         assert new_state.turn_subphase == TurnSubPhase.ROBBER_MOVE
         assert new_state.current_player_id == new_state.robber_roller_id
-        assert sum(new_state.players[0].resources.values()) == 9
+        # 13 - 6 = 7 cartes restantes
+        assert sum(new_state.players[0].resources.values()) == 7
 
     def test_move_robber_updates_location_and_steals(self):
         """Déplacer le voleur met à jour sa position et vole 1 ressource si possible."""
         state = self._state_after_seven_with_pending_discard()
-        state = state.apply_action(DiscardResources(resources={"BRICK": 2, "LUMBER": 2}))
+        state = state.apply_action(DiscardResources(resources={"BRICK": 3, "LUMBER": 2, "WOOL": 1}))
 
         # Préparer les ressources pour que le vol soit déterministe
         for resource in state.players[0].resources:

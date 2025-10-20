@@ -38,6 +38,15 @@ KEY_BINDINGS: Tuple[Tuple[str, int, str], ...] = (
     ("R", pygame.K_r, "select_build_road"),
     ("S", pygame.K_s, "select_build_settlement"),
     ("C", pygame.K_c, "select_build_city"),
+    ("D", pygame.K_d, "buy_development"),
+    ("K", pygame.K_k, "play_knight"),
+    ("Y", pygame.K_y, "play_year_of_plenty"),
+    ("M", pygame.K_m, "play_monopoly"),
+    ("B", pygame.K_b, "play_road_building"),
+    ("T", pygame.K_t, "bank_trade"),
+    ("P", pygame.K_p, "player_trade"),
+    ("A", pygame.K_a, "accept_trade"),
+    ("N", pygame.K_n, "decline_trade"),
     ("BACKSPACE", pygame.K_BACKSPACE, "cancel"),
 )
 
@@ -99,7 +108,7 @@ def main() -> int:
 
     def render_player_panels(panels: Iterable[PlayerPanel]) -> None:
         panel_width = 360
-        panel_height = 120
+        panel_height = 135  # Augmenté pour accommoder deux lignes de ressources
         base_x = SCREEN_WIDTH - panel_width - 20
         base_y = 80
 
@@ -133,16 +142,31 @@ def main() -> int:
             status_surf = small_font.render(status_line, True, (230, 230, 230))
             screen.blit(status_surf, (base_x + 16, top + 46))
 
-            res_line = f"Ressources: {format_resource_summary(panel.resources)}"
-            res_surf = small_font.render(res_line, True, (210, 210, 210))
-            screen.blit(res_surf, (base_x + 16, top + 72))
+            # Afficher les ressources sur deux lignes pour meilleure lisibilité
+            resources = panel.resources
+            res_list = [(res, count) for res, count in resources.items() if count > 0]
+            if res_list:
+                # Première ligne : premières 3 ressources
+                res_line1 = ", ".join([f"{res}:{count}" for res, count in res_list[:3]])
+                res_surf1 = small_font.render(f"Res: {res_line1}", True, (210, 210, 210))
+                screen.blit(res_surf1, (base_x + 16, top + 70))
 
+                # Deuxième ligne : ressources restantes
+                if len(res_list) > 3:
+                    res_line2 = ", ".join([f"{res}:{count}" for res, count in res_list[3:]])
+                    res_surf2 = small_font.render(f"     {res_line2}", True, (210, 210, 210))
+                    screen.blit(res_surf2, (base_x + 16, top + 86))
+            else:
+                res_surf = small_font.render("Res: Aucune", True, (210, 210, 210))
+                screen.blit(res_surf, (base_x + 16, top + 70))
+
+            # Cartes de développement (décalées vers le bas)
             dev_line = (
                 f"Dev: {format_dev_summary(panel.dev_cards)} | Nouvelles: "
                 f"{format_dev_summary(panel.new_dev_cards)}"
             )
             dev_surf = small_font.render(dev_line, True, (200, 200, 200))
-            screen.blit(dev_surf, (base_x + 16, top + 96))
+            screen.blit(dev_surf, (base_x + 16, top + 102))
 
     def render_discard_panel(prompt: DiscardPrompt, layout: Dict[str, object]) -> None:
         panel_rect: pygame.Rect = layout["panel_rect"]  # type: ignore[assignment]

@@ -25,6 +25,7 @@ from catan.app.game_service import GameService
 from catan.gui.hud_controller import PlayerPanel
 from catan.gui.app import DiscardPrompt
 from catan.engine.state import SetupPhase
+from catan.engine.rules import DISCARD_THRESHOLD
 
 
 @pytest.fixture
@@ -211,7 +212,7 @@ def test_discard_flow_selection_and_confirmation(gui_app):
     current = app.state.players[player_id]
     for res in current.resources:
         current.resources[res] = 0
-    current.resources.update({"BRICK": 4, "LUMBER": 4, "GRAIN": 4})  # Total 12 -> discard 3
+    current.resources.update({"BRICK": 4, "LUMBER": 4, "GRAIN": 4})  # Total 12 -> discard 6 (12 // 2)
     app.refresh_state()
 
     assert app.trigger_action("roll_dice", forced_value=7)
@@ -220,28 +221,103 @@ def test_discard_flow_selection_and_confirmation(gui_app):
     assert ui_state.mode == "discard"
     assert isinstance(ui_state.discard_prompt, DiscardPrompt)
     prompt = ui_state.discard_prompt
-    assert prompt.required == 3
-    assert prompt.remaining == 3
+    assert prompt.required == 6  # 12 cartes -> défausser la moitié
+    assert prompt.remaining == 6
     assert prompt.selection == {}
     assert prompt.can_confirm is False
 
     # Ajuster la sélection
-    assert app.adjust_discard_selection("BRICK", 2) is True
+    assert app.adjust_discard_selection("BRICK", 3) is True
+    assert app.adjust_discard_selection("LUMBER", 2) is True
     assert app.adjust_discard_selection("GRAIN", 1) is True
 
     ui_state = app.get_ui_state()
     prompt = ui_state.discard_prompt
     assert prompt.remaining == 0
-    assert prompt.selection["BRICK"] == 2
+    assert prompt.selection["BRICK"] == 3
+    assert prompt.selection["LUMBER"] == 2
     assert prompt.selection["GRAIN"] == 1
     assert prompt.can_confirm is True
 
     # Confirmer la défausse
     assert app.confirm_discard_selection() is True
     refreshed_player = app.state.players[player_id]
-    assert refreshed_player.resources["BRICK"] == 2
+    # Après avoir défaussé 3 BRICK, 2 LUMBER, 1 GRAIN, il reste:
+    # BRICK: 4 - 3 = 1, LUMBER: 4 - 2 = 2, GRAIN: 4 - 1 = 3
+    assert refreshed_player.resources["BRICK"] == 1
+    assert refreshed_player.resources["LUMBER"] == 2
     assert refreshed_player.resources["GRAIN"] == 3
 
     # La phase doit passer au déplacement du voleur
     ui_state = app.get_ui_state()
     assert ui_state.mode == "move_robber"
+
+
+def test_buy_development_action_button(gui_app):
+    """Le bouton acheter carte développement doit être listé et fonctionner."""
+
+    app = gui_app
+    _complete_setup(app)
+
+    player = app.state.players[app.state.current_player_id]
+    for resource in player.resources:
+        player.resources[resource] = 0
+    player.resources.update({"WOOL": 1, "GRAIN": 1, "ORE": 1})
+
+    app.refresh_state()
+    assert app.trigger_action("roll_dice", forced_value=6)
+
+    ui_state = app.get_ui_state()
+    assert "buy_development" in ui_state.buttons
+    assert ui_state.buttons["buy_development"].enabled is True
+
+    total_new_cards_before = sum(player.new_dev_cards.values())
+    assert app.trigger_action("buy_development") is True
+
+    ui_state_after = app.get_ui_state()
+    assert ui_state_after.buttons["buy_development"].enabled is False
+    total_new_cards_after = sum(app.state.players[player.player_id].new_dev_cards.values())
+    assert total_new_cards_after == total_new_cards_before + 1
+
+
+def test_discard_requirements_both_players(gui_app):
+    """Les exigences de défausse doivent être correctes pour chaque joueur successivement."""
+
+    app = gui_app
+    _complete_setup(app)
+
+    player0 = app.state.players[0]
+    player1 = app.state.players[1]
+
+    for resource in player0.resources:
+        player0.resources[resource] = 0
+    for resource in player1.resources:
+        player1.resources[resource] = 0
+
+    player0.resources.update({"BRICK": 5, "LUMBER": 5, "WOOL": 1})  # 11 -> discard 5 (11 // 2)
+    player1.resources.update({"BRICK": 4, "LUMBER": 4, "GRAIN": 4, "ORE": 1})  # 13 -> discard 6 (13 // 2)
+
+    app.refresh_state()
+    assert app.trigger_action("roll_dice", forced_value=7)
+
+    ui_state = app.get_ui_state()
+    assert ui_state.mode == "discard"
+    prompt = ui_state.discard_prompt
+    assert prompt is not None
+    # Joueur 0 a 11 cartes -> doit défausser 11 // 2 = 5 cartes
+    expected_p0 = sum(app.state.players[0].resources.values()) // 2
+    assert prompt.required == expected_p0
+    assert prompt.remaining == expected_p0
+
+    assert app.adjust_discard_selection("BRICK", 3)
+    assert app.adjust_discard_selection("LUMBER", expected_p0 - 3)
+    assert app.confirm_discard_selection()
+
+    ui_state = app.get_ui_state()
+    assert ui_state.mode == "discard"
+    prompt = ui_state.discard_prompt
+    assert prompt is not None
+    # Joueur 1 a 13 cartes -> doit défausser 13 // 2 = 6 cartes
+    expected_p1 = sum(app.state.players[1].resources.values()) // 2
+    assert prompt.required == expected_p1
+    assert prompt.remaining == expected_p1

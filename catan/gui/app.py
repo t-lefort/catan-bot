@@ -21,8 +21,9 @@ from typing import Dict, Optional, Set, Tuple
 import pygame
 
 from catan.app.game_service import GameService
-from catan.engine.actions import EndTurn
+from catan.engine.actions import BuyDevelopment, EndTurn
 from catan.engine.state import GameState, SetupPhase, TurnSubPhase, RESOURCE_TYPES
+from catan.engine.rules import DISCARD_THRESHOLD
 from catan.gui.construction_controller import ConstructionController
 from catan.gui.development_controller import DevelopmentController
 from catan.gui.hud_controller import HUDController
@@ -190,15 +191,18 @@ class CatanH2HApp:
         if self.turn_controller.is_in_discard_phase():
             requirements = self.turn_controller.get_discard_requirements()
             current_id = self.state.current_player_id
-            required = requirements.get(current_id)
-            if required:
+            player = self.state.players[current_id]
+            calc_required = max(sum(player.resources.values()) - DISCARD_THRESHOLD, 0)
+            required = requirements.get(current_id, 0)
+            effective_required = max(required, calc_required)
+            if effective_required > 0:
                 if (
                     self._discard_player_id != current_id
-                    or self._discard_required != required
+                    or self._discard_required != effective_required
                 ):
                     self._discard_selection = {}
                 self._discard_player_id = current_id
-                self._discard_required = required
+                self._discard_required = effective_required
                 self.mode = "discard"
             else:
                 self.mode = "discard_wait"
@@ -261,10 +265,114 @@ class CatanH2HApp:
         if action == "select_build_city":
             return self._enter_build_mode("build_city")
 
+        if action == "buy_development":
+            assert self.construction_controller is not None
+            if not self.construction_controller.handle_buy_development():
+                return False
+            self.refresh_state()
+            return True
+
         if action == "cancel":
             if self.mode == "discard":
                 return self.reset_discard_selection()
             self.mode = "idle" if self.state.phase == SetupPhase.PLAY else "setup"
+            return True
+
+        # Actions pour jouer les cartes de développement
+        if action == "play_knight":
+            assert self.development_controller is not None
+            if not self.development_controller.handle_play_knight():
+                return False
+            self.refresh_state()
+            return True
+
+        if action == "play_year_of_plenty":
+            # Pour Year of Plenty, on doit demander à l'utilisateur quelles ressources choisir
+            # Pour l'instant, on choisit automatiquement les 2 premières ressources disponibles
+            assert self.development_controller is not None
+            options = self.development_controller.get_legal_year_of_plenty_options()
+            if not options:
+                return False
+            # Choisir la première option disponible
+            if not self.development_controller.handle_play_year_of_plenty(options[0]):
+                return False
+            self.refresh_state()
+            return True
+
+        if action == "play_monopoly":
+            # Pour Monopoly, on doit demander à l'utilisateur quelle ressource cibler
+            # Pour l'instant, on choisit automatiquement la première ressource disponible
+            assert self.development_controller is not None
+            resources = self.development_controller.get_legal_monopoly_resources()
+            if not resources:
+                return False
+            # Choisir la première ressource disponible
+            if not self.development_controller.handle_play_monopoly(resources[0]):
+                return False
+            self.refresh_state()
+            return True
+
+        if action == "play_road_building":
+            # Pour Road Building, passer en mode de sélection d'arêtes
+            assert self.development_controller is not None
+            targets = self.development_controller.get_legal_road_building_targets()
+            if not targets:
+                return False
+            # Pour l'instant, placer automatiquement les 2 premières routes légales
+            if targets:
+                if not self.development_controller.handle_play_road_building(targets[0]):
+                    return False
+                self.refresh_state()
+                return True
+            return False
+
+        if action == "bank_trade":
+            # Pour le commerce banque, effectuer le premier échange disponible
+            assert self.trade_controller is not None
+            legal_trades = self.trade_controller.get_legal_bank_trades()
+            if not legal_trades:
+                return False
+            # Effectuer le premier échange légal
+            trade = legal_trades[0]
+            give_resource = list(trade.give.keys())[0]
+            give_amount = trade.give[give_resource]
+            receive_resource = list(trade.receive.keys())[0]
+            if not self.trade_controller.handle_bank_trade(give_resource, give_amount, receive_resource):
+                return False
+            self.refresh_state()
+            return True
+
+        if action == "player_trade":
+            # Pour le commerce joueur-joueur, proposer le premier échange disponible
+            assert self.trade_controller is not None
+            legal_offers = self.trade_controller.get_legal_player_trade_offers()
+            if not legal_offers:
+                return False
+            # Proposer le premier échange légal
+            offer = legal_offers[0]
+            give_resource = list(offer.give.keys())[0]
+            receive_resource = list(offer.receive.keys())[0]
+            if not self.trade_controller.handle_offer_player_trade(
+                give_resource, receive_resource,
+                give_amount=offer.give[give_resource],
+                receive_amount=offer.receive[receive_resource]
+            ):
+                return False
+            self.refresh_state()
+            return True
+
+        if action == "accept_trade":
+            assert self.trade_controller is not None
+            if not self.trade_controller.handle_accept_trade():
+                return False
+            self.refresh_state()
+            return True
+
+        if action == "decline_trade":
+            assert self.trade_controller is not None
+            if not self.trade_controller.handle_decline_trade():
+                return False
+            self.refresh_state()
             return True
 
         return False
@@ -561,6 +669,58 @@ class CatanH2HApp:
             and bool(self.construction_controller.get_legal_city_positions())
         )
         buttons["select_build_city"] = ButtonState("Construire une ville", can_build_city)
+
+        can_buy_development = (
+            self.mode == "idle"
+            and BuyDevelopment() in legal_actions
+        )
+        buttons["buy_development"] = ButtonState("Acheter carte dev", can_buy_development)
+
+        # Boutons pour jouer les cartes de développement
+        assert self.development_controller is not None
+        can_play_knight = (
+            self.mode == "idle"
+            and self.development_controller.can_play_knight()
+        )
+        buttons["play_knight"] = ButtonState("Jouer Chevalier", can_play_knight)
+
+        can_play_yop = (
+            self.mode == "idle"
+            and bool(self.development_controller.get_legal_year_of_plenty_options())
+        )
+        buttons["play_year_of_plenty"] = ButtonState("Jouer Année d'Abondance", can_play_yop)
+
+        can_play_monopoly = (
+            self.mode == "idle"
+            and bool(self.development_controller.get_legal_monopoly_resources())
+        )
+        buttons["play_monopoly"] = ButtonState("Jouer Monopole", can_play_monopoly)
+
+        can_play_road_building = (
+            self.mode == "idle"
+            and bool(self.development_controller.get_legal_road_building_targets())
+        )
+        buttons["play_road_building"] = ButtonState("Jouer Construction de Routes", can_play_road_building)
+
+        # Boutons pour le commerce
+        assert self.trade_controller is not None
+        can_bank_trade = (
+            self.mode == "idle"
+            and bool(self.trade_controller.get_legal_bank_trades())
+        )
+        buttons["bank_trade"] = ButtonState("Échanger avec la banque", can_bank_trade)
+
+        can_player_trade = (
+            self.mode == "idle"
+            and bool(self.trade_controller.get_legal_player_trade_offers())
+        )
+        buttons["player_trade"] = ButtonState("Proposer échange joueur", can_player_trade)
+
+        can_accept_trade = self.trade_controller.can_accept_trade()
+        buttons["accept_trade"] = ButtonState("Accepter l'échange", can_accept_trade)
+
+        can_decline_trade = self.trade_controller.can_decline_trade()
+        buttons["decline_trade"] = ButtonState("Refuser l'échange", can_decline_trade)
 
         # Bouton d'annulation actif lorsqu'un mode temporaire est enclenché
         buttons["cancel"] = ButtonState(
