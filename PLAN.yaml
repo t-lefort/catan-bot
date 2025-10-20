@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-20T16:25:00Z
+last_updated: 2025-10-20T17:05:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 66
-  pending: 20
+  pending: 18
   in_progress: 0
-  completed: 40
+  completed: 41
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -567,11 +567,17 @@ sections:
           2025-10-20T16:24Z: ActionEncoder RL livré + intégration build_observation. Nouveaux tests `tests/test_rl_actions.py` verts, suite `pytest -q` 208/208.
       - id: RL-003
         title: Politiques de base (aléatoire/heuristique)
-        status: pending
+        status: completed
         priority: P0
         dependencies: [SIM-001]
         acceptance_criteria:
           - "Baselines plug‑and‑play pour éval"
+        notes: |
+          2025-10-20T16:45Z: Démarrage de l'implémentation RL-003 — objectif livrer
+          RandomLegalPolicy et une heuristique priorisant villes -> colonies -> routes,
+          testées via catan.sim.runner pour intégration rapide.
+          2025-10-20T17:05Z: Livrées `RandomLegalPolicy` et `HeuristicPolicy` +
+          tests (`tests/test_rl_policies.py`). Suite `python3 -m pytest -q` 213/213 verte.
       - id: RL-004
         title: Cadre self-play + buffer
         status: pending

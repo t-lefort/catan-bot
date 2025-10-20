@@ -4,6 +4,7 @@ Ce module contient les composants nécessaires pour l'entraînement par
 Reinforcement Learning (apprentissage par renforcement) :
 
 - features.py : Encodage des observations du jeu en tenseurs pour les réseaux de neurones
+- policies.py : Agents baselines (aléatoire, heuristique) pour l'évaluation et la simulation
 
 L'encodage utilise une **perspective ego-centrée** : toutes les informations sont
 encodées relativement au joueur actuel, ce qui accélère l'apprentissage en rendant
@@ -21,5 +22,12 @@ Exemple :
 """
 
 from .features import ObservationTensor, build_observation
+from .policies import AgentPolicy, HeuristicPolicy, RandomLegalPolicy
 
-__all__ = ["ObservationTensor", "build_observation"]
+__all__ = [
+    "AgentPolicy",
+    "HeuristicPolicy",
+    "RandomLegalPolicy",
+    "ObservationTensor",
+    "build_observation",
+]
