@@ -9,6 +9,10 @@ Ce module expose le contrat minimal attendu par les tests:
 VP_TO_WIN: int = 15
 DISCARD_THRESHOLD: int = 9
 
+# Limites de pièces par joueur
+MAX_SETTLEMENTS_PER_PLAYER: int = 5
+MAX_CITIES_PER_PLAYER: int = 4
+
 # Coûts de construction (contrat: mapping str -> dict[str, int])
 COSTS = {
     "road": {"BRICK": 1, "LUMBER": 1},
@@ -20,6 +24,7 @@ COSTS = {
 __all__ = [
     "VP_TO_WIN",
     "DISCARD_THRESHOLD",
+    "MAX_SETTLEMENTS_PER_PLAYER",
+    "MAX_CITIES_PER_PLAYER",
     "COSTS",
 ]
-

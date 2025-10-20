@@ -15,7 +15,13 @@ from itertools import combinations
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, cast
 
 from catan.engine.board import Board
-from catan.engine.rules import COSTS, DISCARD_THRESHOLD, VP_TO_WIN
+from catan.engine.rules import (
+    COSTS,
+    DISCARD_THRESHOLD,
+    MAX_CITIES_PER_PLAYER,
+    MAX_SETTLEMENTS_PER_PLAYER,
+    VP_TO_WIN,
+)
 
 RESOURCE_TYPES: tuple[str, ...] = ("BRICK", "LUMBER", "WOOL", "GRAIN", "ORE")
 DEV_CARD_TYPES: tuple[str, ...] = (
@@ -476,6 +482,9 @@ class GameState:
                 vertex_id = action.vertex_id
                 if vertex_id not in self.board.vertices:
                     return False
+                current_player = self.players[self.current_player_id]
+                if len(current_player.settlements) >= MAX_SETTLEMENTS_PER_PLAYER:
+                    return False
                 # Vérifier qu'aucun joueur n'a déjà construit ici
                 for player in self.players:
                     if vertex_id in player.settlements or vertex_id in player.cities:
@@ -676,6 +685,8 @@ class GameState:
         if isinstance(action, PlaceSettlement):
             if action.vertex_id not in self.board.vertices:
                 return False
+            if len(current_player.settlements) >= MAX_SETTLEMENTS_PER_PLAYER:
+                return False
             if self._vertex_is_occupied(action.vertex_id):
                 return False
             if not self._vertex_respects_distance_rule(action.vertex_id):
@@ -691,6 +702,8 @@ class GameState:
 
         if isinstance(action, BuildCity):
             if action.vertex_id not in self.board.vertices:
+                return False
+            if len(current_player.cities) >= MAX_CITIES_PER_PLAYER:
                 return False
             if not self.dice_rolled_this_turn:
                 return False
@@ -811,6 +824,8 @@ class GameState:
         }
 
         if isinstance(action, PlaceSettlement):
+            if len(current_player.settlements) >= MAX_SETTLEMENTS_PER_PLAYER:
+                raise ValueError("Nombre maximal de colonies atteint")
             # Placer la colonie
             current_player.settlements.append(action.vertex_id)
             current_player.victory_points += 1
@@ -866,6 +881,8 @@ class GameState:
             recompute_longest_road = True
 
         elif isinstance(action, BuildCity):
+            if len(current_player.cities) >= MAX_CITIES_PER_PLAYER:
+                raise ValueError("Nombre maximal de villes atteint")
             # Améliorer une colonie en ville
             if action.vertex_id in current_player.settlements:
                 current_player.settlements.remove(action.vertex_id)

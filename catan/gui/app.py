@@ -301,13 +301,16 @@ class CatanH2HApp:
 
         if action == "play_monopoly":
             # Pour Monopoly, on doit demander à l'utilisateur quelle ressource cibler
-            # Pour l'instant, on choisit automatiquement la première ressource disponible
             assert self.development_controller is not None
             resources = self.development_controller.get_legal_monopoly_resources()
             if not resources:
                 return False
-            # Choisir la première ressource disponible
-            if not self.development_controller.handle_play_monopoly(resources[0]):
+            selected_resource = kwargs.get("resource")
+            if selected_resource is None:
+                selected_resource = resources[0]
+            if selected_resource not in resources:
+                return False
+            if not self.development_controller.handle_play_monopoly(selected_resource):
                 return False
             self.refresh_state()
             return True
@@ -332,12 +335,33 @@ class CatanH2HApp:
             legal_trades = self.trade_controller.get_legal_bank_trades()
             if not legal_trades:
                 return False
-            # Effectuer le premier échange légal
+            give_resource = kwargs.get("give_resource")
+            give_amount = kwargs.get("give_amount")
+            receive_resource = kwargs.get("receive_resource")
+            if give_resource is not None and give_amount is not None and receive_resource is not None:
+                try:
+                    give_amount_int = int(give_amount)
+                except (TypeError, ValueError):
+                    return False
+                if not self.trade_controller.handle_bank_trade(
+                    str(give_resource),
+                    give_amount_int,
+                    str(receive_resource),
+                ):
+                    return False
+                self.refresh_state()
+                return True
+
+            # Effectuer le premier échange légal (fallback pour compatibilité)
             trade = legal_trades[0]
-            give_resource = list(trade.give.keys())[0]
-            give_amount = trade.give[give_resource]
-            receive_resource = list(trade.receive.keys())[0]
-            if not self.trade_controller.handle_bank_trade(give_resource, give_amount, receive_resource):
+            fallback_give_resource = list(trade.give.keys())[0]
+            fallback_give_amount = trade.give[fallback_give_resource]
+            fallback_receive_resource = list(trade.receive.keys())[0]
+            if not self.trade_controller.handle_bank_trade(
+                fallback_give_resource,
+                fallback_give_amount,
+                fallback_receive_resource,
+            ):
                 return False
             self.refresh_state()
             return True

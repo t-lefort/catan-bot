@@ -116,6 +116,16 @@ def test_hex_vertices_computed(headless_pygame, test_board):
         assert len(renderer._hex_coords[tile_id]) == 6
 
 
+def test_board_renderer_has_right_offset(headless_pygame, test_board):
+    """Le plateau doit laisser une marge suffisante à gauche pour le HUD."""
+
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    renderer = BoardRenderer(screen, test_board)
+
+    min_x = min(x for x, _ in renderer._vertex_screen_coords.values())
+    assert min_x >= 240
+
+
 def test_get_tile_at_position_returns_tile(headless_pygame, test_board):
     """Détecter la tuile cliquée doit renvoyer l'identifiant attendu."""
 

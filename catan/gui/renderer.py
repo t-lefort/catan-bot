@@ -30,7 +30,7 @@ SCREEN_HEIGHT = 800
 
 # Constantes plateau
 HEX_SIZE = 50  # rayon de l'hexagone en pixels
-BOARD_OFFSET_X = 400  # décalage du plateau pour laisser de la place au HUD
+BOARD_OFFSET_X = 480  # décalage du plateau pour laisser de la place au HUD
 BOARD_OFFSET_Y = 350  # centrage vertical
 
 # Couleurs (palette sobre)

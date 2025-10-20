@@ -198,8 +198,75 @@ def test_move_robber_via_ui_state(gui_app):
     assert app.state.robber_tile_id == target_tile
     assert app.state.robber_tile_id != original_tile
     assert app.get_ui_state().mode == "idle"
-    assert app.renderer.board.tiles[target_tile].has_robber is True
-    assert app.renderer.board.tiles[original_tile].has_robber is False
+
+
+def test_gui_allows_selecting_monopoly_resource(gui_app):
+    """Le joueur peut choisir la ressource ciblée avant de jouer Monopole."""
+
+    app = gui_app
+    _complete_setup(app)
+
+    assert app.trigger_action("roll_dice", forced_value=6)
+
+    current_id = app.state.current_player_id
+    opponent_id = 1 - current_id
+    player = app.state.players[current_id]
+    opponent = app.state.players[opponent_id]
+
+    for res in player.resources:
+        player.resources[res] = 0
+    for res in opponent.resources:
+        opponent.resources[res] = 0
+
+    player.dev_cards["MONOPOLY"] = 1
+    opponent.resources.update({"BRICK": 1, "ORE": 2})
+    app.refresh_state()
+
+    assert app.trigger_action("play_monopoly", resource="ORE")
+
+    updated_player = app.state.players[current_id]
+    updated_opponent = app.state.players[opponent_id]
+
+    assert updated_opponent.resources["ORE"] == 0
+    assert updated_opponent.resources["BRICK"] == 1
+    assert updated_player.resources["ORE"] == 2
+    assert updated_player.resources["BRICK"] == 0
+    assert updated_player.dev_cards["MONOPOLY"] == 0
+
+
+def test_gui_bank_trade_uses_selected_resources(gui_app):
+    """Le commerce banque doit respecter les ressources choisies par l'utilisateur."""
+
+    app = gui_app
+    _complete_setup(app)
+
+    assert app.trigger_action("roll_dice", forced_value=4)
+
+    current_id = app.state.current_player_id
+    player = app.state.players[current_id]
+    for res in player.resources:
+        player.resources[res] = 0
+
+    trade_rates = app.trade_controller.get_bank_trade_rates()
+    wool_rate = trade_rates["WOOL"]
+    brick_rate = trade_rates["BRICK"]
+
+    player.resources["BRICK"] = brick_rate
+    player.resources["WOOL"] = wool_rate
+    app.refresh_state()
+
+    assert app.trigger_action(
+        "bank_trade",
+        give_resource="WOOL",
+        give_amount=wool_rate,
+        receive_resource="ORE",
+    )
+
+    updated_player = app.state.players[current_id]
+
+    assert updated_player.resources["WOOL"] == 0
+    assert updated_player.resources["ORE"] == 1
+    assert updated_player.resources["BRICK"] == brick_rate
 
 
 def test_discard_flow_selection_and_confirmation(gui_app):

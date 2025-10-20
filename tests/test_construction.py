@@ -186,3 +186,34 @@ def test_build_city_requires_resources():
 
     action = BuildCity(vertex_id=10)
     assert not state.is_action_legal(action)
+
+
+def test_place_settlement_respects_piece_limit():
+    """Impossible de dépasser 5 colonies simultanées pour un joueur."""
+
+    state = base_play_state()
+    player = state.players[0]
+    player.resources.update({"BRICK": 2, "LUMBER": 2, "WOOL": 2, "GRAIN": 2})
+
+    # Pré-remplir les 5 colonies disponibles sur des sommets non adjacents
+    player.settlements = [0, 2, 4, 6, 8]
+    # Conserver la route connectée au sommet 10 pour rendre le placement autrement légal
+    player.roads = [8]
+
+    action = PlaceSettlement(vertex_id=10)
+    assert not state.is_action_legal(action)
+
+
+def test_build_city_respects_piece_limit():
+    """Impossible de dépasser 4 villes simultanées pour un joueur."""
+
+    state = base_play_state()
+    player = state.players[0]
+    player.resources.update({"GRAIN": 3, "ORE": 3})
+
+    # Pré-remplir les 4 villes disponibles
+    player.cities = [0, 2, 4, 6]
+    player.settlements = [10]  # Ville à améliorer restante
+
+    action = BuildCity(vertex_id=10)
+    assert not state.is_action_legal(action)

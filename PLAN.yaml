@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-20T13:49:17Z
+last_updated: 2025-10-20T15:10:00Z
 owner: "Thomas + Agent"
 
 status_summary:
-  total: 62
+  total: 66
   pending: 23
   in_progress: 0
-  completed: 34
+  completed: 38
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -240,6 +240,17 @@ sections:
         notes: |
           2025-10-19T18:45Z: Reprise — objectif implémenter sérialisation complète + RNG seedable (tests-first ENG-012).
           2025-10-19T19:08Z: Implémentation terminée — ajout module `catan.engine.serialize`, RNG seedable (GameState.rng_state), nouveaux tests `tests/test_serialization.py`, suite `python3 -m pytest` (80 tests) verte.
+      - id: ENG-013
+        title: Limiter colonies/villes par joueur
+        status: completed
+        priority: P0
+        dependencies: [ENG-005, ENG-006]
+        acceptance_criteria:
+          - "Impossible de dépasser 5 colonies actives par joueur"
+          - "Impossible de dépasser 4 villes actives par joueur"
+        notes: |
+          2025-10-20: Correction bug — validation PlaceSettlement/BuildCity + tests TDD pour empêcher dépassement des pièces disponibles.
+          2025-10-20T15:05Z: Implémentation terminée — nouvelles vérifications MAX_SETTLEMENTS/MAX_CITIES + tests `tests/test_construction.py::test_place_settlement_respects_piece_limit` et `test_build_city_respects_piece_limit`.
 
   - id: APP
     title: Services d'orchestration
@@ -447,6 +458,39 @@ sections:
           UIState enrichi (DiscardPrompt), boucle pygame rend panneau défausse et gère les clics.
           2025-10-20T13:49Z: Bouton achat dev ajouté (binding D), calcul défausse fiabilisé (les
           deux joueurs affichent désormais la bonne cible). Tests GUI app étendus.
+      - id: GUI-014
+        title: Sélection ressource Monopoly en GUI
+        status: completed
+        priority: P1
+        dependencies: [GUI-007, ENG-011]
+        acceptance_criteria:
+          - "UI permet au joueur de choisir la ressource ciblée avant de jouer Monopole"
+          - "Tests GUI couvrent la sélection et l'action dispatchée correspondante"
+        notes: |
+          2025-10-20: Bug signalé — remplacer la sélection automatique par un flux interactif.
+          2025-10-20T15:07Z: `CatanH2HApp.trigger_action` accepte un paramètre `resource`, tests `tests/test_gui_app.py::test_gui_allows_selecting_monopoly_resource` valident le choix manuel.
+      - id: GUI-015
+        title: Sélection ressources échange banque
+        status: completed
+        priority: P1
+        dependencies: [GUI-005, ENG-007]
+        acceptance_criteria:
+          - "Le joueur choisit quelles ressources donner et recevoir avant TradeBank"
+          - "Tests GUI valident la correspondance entre choix et action dispatchée"
+        notes: |
+          2025-10-20: Bug signalé — rendre le commerce banque interactif plutôt qu'automatique.
+          2025-10-20T15:08Z: Ajout arguments `give_resource`/`give_amount`/`receive_resource` sur `trigger_action`, test `tests/test_gui_app.py::test_gui_bank_trade_uses_selected_resources`.
+      - id: GUI-016
+        title: Décaler plateau pour lisibilité HUD
+        status: completed
+        priority: P2
+        dependencies: [GUI-002]
+        acceptance_criteria:
+          - "Plateau rendu avec marge gauche suffisante (plus de chevauchement HUD)"
+          - "Tests géométrie/rendu valident le nouvel offset"
+        notes: |
+          2025-10-20: Ajuster offset horizontal pour éviter recouvrement du plateau avec les textes HUD.
+          2025-10-20T15:09Z: Offset augmenté (`BOARD_OFFSET_X=480`), test `tests/test_gui_smoke.py::test_board_renderer_has_right_offset` garantit la marge.
 
   - id: SIM
     title: Simulation rapide (headless)
