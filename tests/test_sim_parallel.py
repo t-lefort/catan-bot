@@ -12,7 +12,12 @@ import dataclasses
 
 import pytest
 
-from catan.sim.parallel import ParallelRolloutRunner
+from catan.sim.parallel import (
+    EpisodeSummary,
+    ParallelRolloutRunner,
+    RolloutSummary,
+    WorkerSummary,
+)
 from .sim_test_utils import FirstLegalPolicy
 
 
@@ -109,3 +114,50 @@ def test_parallel_runner_raises_if_workers_invalid():
 
     with pytest.raises(ValueError):
         _make_runner(num_workers=1, total_episodes=1, max_steps=0, base_seed=0)
+
+
+def test_rollout_summary_compact_traces_and_kpis():
+    """Les résumés doivent fournir des traces compactes et des KPIs agrégés."""
+
+    episodes = (
+        EpisodeSummary(seed=1, steps=5, done=True, winner_id=0, duration_seconds=0.5),
+        EpisodeSummary(seed=2, steps=7, done=True, winner_id=1, duration_seconds=0.7),
+        EpisodeSummary(seed=3, steps=4, done=False, winner_id=None, duration_seconds=0.4),
+    )
+    worker = WorkerSummary(worker_id=0, episode_summaries=episodes, duration_seconds=1.6)
+    summary = RolloutSummary(worker_summaries=(worker,), duration_seconds=1.6)
+
+    traces = summary.compact_traces
+    assert isinstance(traces, tuple)
+    assert len(traces) == 3
+    assert traces[0]["seed"] == 1
+    assert traces[0]["steps"] == 5
+    assert traces[0]["done"] is True
+    assert traces[0]["winner_id"] == 0
+    assert traces[0]["duration_seconds"] == pytest.approx(0.5)
+
+    kpis = summary.kpis
+    assert kpis.total_episodes == 3
+    assert kpis.completed_episodes == 2
+    assert kpis.mean_episode_steps == pytest.approx((5 + 7 + 4) / 3)
+    assert kpis.mean_episode_duration_seconds == pytest.approx((0.5 + 0.7 + 0.4) / 3)
+    assert kpis.wins_by_player == (1, 1)
+    assert kpis.win_rate_by_player == pytest.approx((0.5, 0.5))
+
+
+def test_rollout_summary_kpis_handle_zero_completed_games():
+    """La victoire doit retourner 0 lorsque aucun épisode n'est terminé."""
+
+    episodes = (
+        EpisodeSummary(seed=10, steps=3, done=False, winner_id=None, duration_seconds=0.2),
+    )
+    worker = WorkerSummary(worker_id=0, episode_summaries=episodes, duration_seconds=0.2)
+    summary = RolloutSummary(worker_summaries=(worker,), duration_seconds=0.2)
+
+    kpis = summary.kpis
+    assert kpis.total_episodes == 1
+    assert kpis.completed_episodes == 0
+    assert kpis.mean_episode_steps == pytest.approx(3)
+    assert kpis.mean_episode_duration_seconds == pytest.approx(0.2)
+    assert kpis.wins_by_player == (0, 0)
+    assert kpis.win_rate_by_player == (0.0, 0.0)

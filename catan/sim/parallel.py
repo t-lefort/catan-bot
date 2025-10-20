@@ -19,7 +19,7 @@ import time
 import pickle
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Callable, Literal, Tuple
+from typing import Any, Callable, Literal, Tuple
 
 from catan.rl.policies import AgentPolicy
 from catan.sim.runner import HeadlessEnv
@@ -35,6 +35,7 @@ class EpisodeSummary:
     steps: int
     done: bool
     winner_id: int | None
+    duration_seconds: float = field(default=0.0, compare=False)
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,16 @@ class RolloutSummary:
     duration_seconds: float = field(default=0.0, compare=False)
 
     @property
+    def _episodes(self) -> Tuple[EpisodeSummary, ...]:
+        """Aplati les épisodes agrégés par worker."""
+
+        return tuple(
+            episode
+            for worker in self.worker_summaries
+            for episode in worker.episode_summaries
+        )
+
+    @property
     def total_workers(self) -> int:
         return len(self.worker_summaries)
 
@@ -76,6 +87,90 @@ class RolloutSummary:
     @property
     def total_steps(self) -> int:
         return sum(worker.steps for worker in self.worker_summaries)
+
+    @property
+    def compact_traces(self) -> Tuple[dict[str, Any], ...]:
+        """Retourne une trace compacte de chaque épisode (seed, steps, durée, etc.)."""
+
+        traces = []
+        for episode in self._episodes:
+            traces.append(
+                {
+                    "seed": episode.seed,
+                    "steps": episode.steps,
+                    "done": episode.done,
+                    "winner_id": episode.winner_id,
+                    "duration_seconds": episode.duration_seconds,
+                }
+            )
+        return tuple(traces)
+
+    @property
+    def kpis(self) -> "RolloutKPIs":
+        """Calcule les KPIs agrégés attendus par SIM-004."""
+
+        episodes = self._episodes
+        total_episodes = len(episodes)
+        if total_episodes == 0:
+            return RolloutKPIs(
+                total_episodes=0,
+                completed_episodes=0,
+                wins_by_player=(0, 0),
+                win_rate_by_player=(0.0, 0.0),
+                mean_episode_steps=0.0,
+                mean_episode_duration_seconds=0.0,
+            )
+
+        total_steps = sum(episode.steps for episode in episodes)
+        total_duration = sum(episode.duration_seconds for episode in episodes)
+        completed = [episode for episode in episodes if episode.done and episode.winner_id is not None]
+
+        # Déterminer le nombre de joueurs observé (min 2 car variante 1v1).
+        max_player_id = max((episode.winner_id for episode in episodes if episode.winner_id is not None), default=1)
+        player_count = max(2, max_player_id + 1)
+        wins_by_player = [0] * player_count
+        for episode in episodes:
+            if episode.done and episode.winner_id is not None:
+                wins_by_player[episode.winner_id] += 1
+
+        completed_count = len(completed)
+        if completed_count > 0:
+            win_rate = tuple(wins / completed_count for wins in wins_by_player)
+        else:
+            win_rate = tuple(0.0 for _ in wins_by_player)
+
+        return RolloutKPIs(
+            total_episodes=total_episodes,
+            completed_episodes=completed_count,
+            wins_by_player=tuple(wins_by_player),
+            win_rate_by_player=win_rate,
+            mean_episode_steps=total_steps / total_episodes,
+            mean_episode_duration_seconds=total_duration / total_episodes,
+        )
+
+
+@dataclass(frozen=True)
+class RolloutKPIs:
+    """Indicateurs clés agrégés sur un ensemble de rollouts."""
+
+    total_episodes: int
+    completed_episodes: int
+    wins_by_player: Tuple[int, ...]
+    win_rate_by_player: Tuple[float, ...]
+    mean_episode_steps: float
+    mean_episode_duration_seconds: float
+
+    def as_dict(self) -> dict[str, Any]:
+        """Expose une représentation JSON-friendly des métriques."""
+
+        return {
+            "total_episodes": self.total_episodes,
+            "completed_episodes": self.completed_episodes,
+            "wins_by_player": list(self.wins_by_player),
+            "win_rate_by_player": list(self.win_rate_by_player),
+            "mean_episode_steps": self.mean_episode_steps,
+            "mean_episode_duration_seconds": self.mean_episode_duration_seconds,
+        }
 
 
 def _validate_positive(name: str, value: int) -> None:
@@ -117,6 +212,7 @@ def _run_worker(
     episodes: list[EpisodeSummary] = []
 
     for seed in episode_seeds:
+        episode_start = time.perf_counter()
         state = env.reset(seed=seed)
         steps = 0
         done = False
@@ -133,12 +229,15 @@ def _run_worker(
                 winner_id = state.winner_id
                 break
 
+        duration = time.perf_counter() - episode_start
+
         episodes.append(
             EpisodeSummary(
                 seed=seed,
                 steps=steps,
                 done=done,
                 winner_id=winner_id,
+                duration_seconds=duration,
             )
         )
 
@@ -197,38 +296,37 @@ class ParallelRolloutRunner:
         # Cas trivial: un seul worker → exécution synchrone.
         if self._num_workers == 1:
             worker_id, seeds = assignments[0]
-            summary = _run_worker(worker_id, seeds, self._max_steps_per_episode, self._policy_factory)
-            duration = time.perf_counter() - start
-            return RolloutSummary(worker_summaries=(summary,), duration_seconds=duration)
-
-        worker_summaries: list[WorkerSummary]
-
-        if self._executor_kind == "thread":
-            with ThreadPoolExecutor(max_workers=self._num_workers) as executor:
-                futures = [
-                    executor.submit(
-                        _run_worker,
-                        worker_id,
-                        seeds,
-                        self._max_steps_per_episode,
-                        self._policy_factory,
-                    )
-                    for worker_id, seeds in assignments
-                ]
-                worker_summaries = [future.result() for future in futures]
+            worker_summary = _run_worker(worker_id, seeds, self._max_steps_per_episode, self._policy_factory)
+            worker_summaries = [worker_summary]
         else:
-            with ProcessPoolExecutor(max_workers=self._num_workers) as executor:
-                futures = [
-                    executor.submit(
-                        _run_worker,
-                        worker_id,
-                        seeds,
-                        self._max_steps_per_episode,
-                        self._policy_factory,
-                    )
-                    for worker_id, seeds in assignments
-                ]
-                worker_summaries = [future.result() for future in futures]
+            worker_summaries: list[WorkerSummary]
+
+            if self._executor_kind == "thread":
+                with ThreadPoolExecutor(max_workers=self._num_workers) as executor:
+                    futures = [
+                        executor.submit(
+                            _run_worker,
+                            worker_id,
+                            seeds,
+                            self._max_steps_per_episode,
+                            self._policy_factory,
+                        )
+                        for worker_id, seeds in assignments
+                    ]
+                    worker_summaries = [future.result() for future in futures]
+            else:
+                with ProcessPoolExecutor(max_workers=self._num_workers) as executor:
+                    futures = [
+                        executor.submit(
+                            _run_worker,
+                            worker_id,
+                            seeds,
+                            self._max_steps_per_episode,
+                            self._policy_factory,
+                        )
+                        for worker_id, seeds in assignments
+                    ]
+                    worker_summaries = [future.result() for future in futures]
 
         duration = time.perf_counter() - start
         return RolloutSummary(worker_summaries=tuple(worker_summaries), duration_seconds=duration)
@@ -237,6 +335,7 @@ class ParallelRolloutRunner:
 __all__ = [
     "EpisodeSummary",
     "WorkerSummary",
+    "RolloutKPIs",
     "RolloutSummary",
     "ParallelRolloutRunner",
 ]

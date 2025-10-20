@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-20T18:05:00Z
+last_updated: 2025-10-21T09:45:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 66
-  pending: 17
+  pending: 13
   in_progress: 0
-  completed: 42
+  completed: 44
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -531,11 +531,14 @@ sections:
             - Suite complète `./venv/bin/pytest -q` (217 tests) verte.
       - id: SIM-004
         title: KPIs et traces compactes
-        status: pending
+        status: completed
         priority: P1
         dependencies: [SIM-003]
         acceptance_criteria:
           - "Temps/épisode, coups/épisode, taux de victoire"
+        notes: |
+          2025-10-21T09:12Z: Session en cours — objectif instrumenter ParallelRolloutRunner avec KPIs agrégés et traces compactes.
+          2025-10-21T09:44Z: Livré — ajout RolloutKPIs, compact_traces, durée d'épisode et tests `tests/test_sim_parallel.py`; suite `./venv/bin/python -m pytest -q` (219) verte.
       - id: SIM-005
         title: Harnais d’évaluation (tournois)
         status: pending
@@ -698,7 +701,7 @@ sections:
     tasks:
       - id: TEST-001
         title: Unitaires moteur (types, coûts, placements)
-        status: pending
+        status: completed
         priority: P0
         dependencies: [ENG-001, ENG-005]
         acceptance_criteria:
@@ -708,6 +711,8 @@ sections:
           - catan.engine.rules: constantes VP_TO_WIN, DISCARD_THRESHOLD, COSTS
           - catan.engine.board: Board.standard(), tile/vertex/edge counts
           2025-10-17: Mise en pause le temps de documenter l'architecture (DOC-005)
+          2025-10-20T14:51Z: Reprise TEST-001 — audit couverture moteur + ajout tests pour atteindre >=70%.
+          2025-10-20T14:53Z: Couverture mesurée via `./venv/bin/python -m pytest --cov=catan.engine` => 93% (objectif satisfait).
       - id: TEST-002
         title: Propriétés (Hypothesis) distribution et invariants
         status: pending
