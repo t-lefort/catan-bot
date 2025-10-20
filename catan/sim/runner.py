@@ -92,6 +92,22 @@ class ActionSpace:
         legal_keys = {_action_key(action) for action in legal_actions}
         return [key in legal_keys for key in self._keys]
 
+    def index(self, action: Action) -> int:
+        """Retourne l'index d'une action dans le catalogue."""
+
+        key = _action_key(action)
+        if key not in self._key_to_index:
+            raise KeyError(key)
+        return self._key_to_index[key]
+
+    def action_at(self, index: int) -> Action:
+        """Retourne l'action référencée par un index."""
+
+        return self._catalog[index]
+
+    def __len__(self) -> int:
+        return len(self._catalog)
+
     def copy(self) -> "ActionSpace":
         """Crée une copie de l'espace d'actions (ordre et index identiques)."""
 

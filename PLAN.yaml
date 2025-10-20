@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-20T13:18:43Z
+last_updated: 2025-10-20T16:25:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 66
-  pending: 21
+  pending: 20
   in_progress: 0
-  completed: 39
+  completed: 40
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -556,12 +556,15 @@ sections:
           2025-10-20T13:18Z: Implémentation livrée (`catan.rl.features` + `tests/test_rl_features.py`), `python3 -m pytest -q` (201 tests) vert.
       - id: RL-002
         title: Espace d’actions + masquage
-        status: pending
+        status: completed
         priority: P0
         dependencies: [ENG-011, SIM-001]
         acceptance_criteria:
           - "Masques valides pour toutes phases"
           - "Alignement possible avec l'encodage d'actions de catanatron"
+        notes: |
+          2025-10-20T16:00Z: Session GPT-5 Codex - objectif RL-002 (action space + masques alignés catanatron). TDD sur tests RL.
+          2025-10-20T16:24Z: ActionEncoder RL livré + intégration build_observation. Nouveaux tests `tests/test_rl_actions.py` verts, suite `pytest -q` 208/208.
       - id: RL-003
         title: Politiques de base (aléatoire/heuristique)
         status: pending

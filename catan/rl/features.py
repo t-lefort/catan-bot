@@ -16,6 +16,7 @@ from catan.engine.state import (
     SetupPhase,
     VP_TO_WIN,
 )
+from catan.rl.actions import ActionEncoder
 from catan.sim.runner import ActionSpace, build_default_action_catalog
 
 _RESOURCE_TO_INDEX: Dict[str, int] = {
@@ -46,6 +47,7 @@ def build_observation(
     state: GameState,
     *,
     action_space: ActionSpace | None = None,
+    action_encoder: ActionEncoder | None = None,
 ) -> ObservationTensor:
     """Construit un ObservationTensor normalisé à partir d'un GameState.
 
@@ -70,7 +72,7 @@ def build_observation(
     dev_cards_tensor = _encode_dev_cards(state, current_player)
     bank_tensor = _encode_bank(state)
     metadata_tensor = _encode_metadata(state, current_player)
-    legal_mask = _encode_legal_actions(state, action_space)
+    legal_mask = _encode_legal_actions(state, action_space, action_encoder)
 
     return ObservationTensor(
         board=board_tensor,
@@ -213,7 +215,11 @@ def _encode_owner_ego(owner_id: int | None, current_player: int) -> float:
 def _encode_legal_actions(
     state: GameState,
     action_space: ActionSpace | None,
+    action_encoder: ActionEncoder | None,
 ) -> np.ndarray:
+    if action_encoder is not None:
+        return action_encoder.build_mask(state)
+
     space = action_space or ActionSpace(build_default_action_catalog(state.board))
     legal_actions = state.legal_actions()
     space.register(legal_actions)

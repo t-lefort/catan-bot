@@ -9,8 +9,8 @@ import pytest
 
 from catan.engine.actions import PlaceRoad, PlaceSettlement
 from catan.engine.state import GameState, RESOURCE_TYPES, SetupPhase
+from catan.rl.actions import ActionEncoder
 from catan.rl.features import ObservationTensor, build_observation
-from catan.sim.runner import ActionSpace, build_default_action_catalog
 
 
 def _complete_setup(state: GameState) -> GameState:
@@ -43,9 +43,9 @@ class TestObservationBuilder:
 
     def test_initial_state_shapes_and_defaults(self):
         state = GameState.new_1v1_game(seed=123)
-        action_space = ActionSpace(build_default_action_catalog(state.board))
+        encoder = ActionEncoder(board=state.board)
 
-        observation = build_observation(state, action_space=action_space)
+        observation = build_observation(state, action_encoder=encoder)
 
         assert isinstance(observation, ObservationTensor)
         assert observation.board.shape == (19, 6)
@@ -100,18 +100,16 @@ class TestObservationBuilder:
         assert observation.metadata[7] == pytest.approx(0.0)  # VP opponent
         assert observation.metadata[8] == pytest.approx(len(state.dev_deck) / 25.0)
 
-        expected_mask = np.array(
-            action_space.mask(state.legal_actions()), dtype=np.bool_
-        )
+        expected_mask = encoder.build_mask(state)
         np.testing.assert_array_equal(
             observation.legal_actions_mask, expected_mask
         )
 
     def test_state_after_setup_reflects_board_and_hands(self):
         state = _complete_setup(GameState.new_1v1_game(seed=123))
-        action_space = ActionSpace(build_default_action_catalog(state.board))
+        encoder = ActionEncoder(board=state.board)
 
-        observation = build_observation(state, action_space=action_space)
+        observation = build_observation(state, action_encoder=encoder)
 
         current_player_id = state.current_player_id
         opponent_id = 1 - current_player_id
@@ -161,9 +159,7 @@ class TestObservationBuilder:
         assert observation.metadata[7] == pytest.approx(opponent_player.victory_points / 15.0)
         assert observation.metadata[8] == pytest.approx(len(state.dev_deck) / 25.0)
 
-        expected_mask = np.array(
-            action_space.mask(state.legal_actions()), dtype=np.bool_
-        )
+        expected_mask = encoder.build_mask(state)
         np.testing.assert_array_equal(
             observation.legal_actions_mask, expected_mask
         )
@@ -171,7 +167,7 @@ class TestObservationBuilder:
     def test_ego_centric_perspective_consistency(self):
         """Vérifie que la perspective ego-centrée fonctionne pour les deux joueurs."""
         state = _complete_setup(GameState.new_1v1_game(seed=456))
-        action_space = ActionSpace(build_default_action_catalog(state.board))
+        encoder = ActionEncoder(board=state.board)
 
         # Ajouter des ressources différentes aux deux joueurs pour tester
         state.players[0].resources["LUMBER"] = 5
@@ -183,11 +179,11 @@ class TestObservationBuilder:
         original_player = state.current_player_id
 
         # Observation du point de vue du joueur actuel
-        obs_current = build_observation(state, action_space=action_space)
+        obs_current = build_observation(state, action_encoder=encoder)
 
         # Changer de joueur actuel pour tester l'autre perspective
         state.current_player_id = 1 - original_player
-        obs_other = build_observation(state, action_space=action_space)
+        obs_other = build_observation(state, action_encoder=encoder)
 
         # Restaurer le joueur original
         state.current_player_id = original_player
