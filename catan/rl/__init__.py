@@ -6,6 +6,7 @@ Reinforcement Learning (apprentissage par renforcement) :
 - features.py : Encodage des observations du jeu en tenseurs pour les réseaux de neurones
 - policies.py : Agents baselines (aléatoire, heuristique) pour l'évaluation et la simulation
 - self_play.py : Cadre self-play, buffer de transitions et orchestration de parties
+- network.py : Architecture de réseau de neurones (policy + value)
 
 L'encodage utilise une **perspective ego-centrée** : toutes les informations sont
 encodées relativement au joueur actuel, ce qui accélère l'apprentissage en rendant
@@ -23,11 +24,13 @@ Exemple :
 """
 
 from .features import ObservationTensor, build_observation
+from .network import CatanPolicyValueNetwork
 from .policies import AgentPolicy, HeuristicPolicy, RandomLegalPolicy
 from .self_play import RolloutBuffer, SelfPlayEpisode, SelfPlayRunner, SelfPlayTransition
 
 __all__ = [
     "AgentPolicy",
+    "CatanPolicyValueNetwork",
     "HeuristicPolicy",
     "RandomLegalPolicy",
     "ObservationTensor",

@@ -74,3 +74,5 @@ J'ai rapidement réussi à faire une partie complète, ce n'est pas encore parfa
 ChatGPT attaque la partie RL. J'ai fait coder l'encodage et j'ai demander à Claude de m'expliquer comment ça marche, ce qui fait un bon encodage et de commenter la façon de faire de ChatGPT. Comme je ne connais pas trop les algorithmes de RL autre que ceux utilisé dans notre TIPE, ça fait un bon exercice pour tester de dev un truc que je ne comprend pas parfaitement.
 Claude me suggère une bonne amélioration qui est d'encoder avec une vision ego-centrée pour éviter que l'agent ait à apprendre en fonction de sa position. Il implémente le changement directement.
 
+## Etape 17
+En arrivant à l'étape RL-006 je lui demande de m'expliquer comme à un enfant et il le fait super bien. Je peux lui poser d'autres questions pour approfondir le sujet. 

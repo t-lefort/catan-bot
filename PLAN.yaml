@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-21T10:45:00Z
+last_updated: 2025-10-21T11:00:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 66
-  pending: 12
+  pending: 11
   in_progress: 0
-  completed: 45
+  completed: 46
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -597,11 +597,13 @@ sections:
           2025-10-21T10:44Z: Implémentation `catan.rl.self_play` (SelfPlayRunner, RolloutBuffer, SelfPlayEpisode, SelfPlayTransition) et tests-first `tests/test_rl_self_play.py`. Commande de validation : `./venv/bin/pytest tests/test_rl_self_play.py -q`.
       - id: RL-005
         title: Réseau de politique/valeur
-        status: pending
+        status: completed
         priority: P1
         dependencies: [RL-001]
         acceptance_criteria:
           - "Architecture initiale définie (PyTorch)"
+        notes: |
+          2025-10-21T11:00Z: Implémentation terminée — `CatanPolicyValueNetwork` (PyTorch) avec encodeur partagé (MLP), policy head + value head, masked softmax et select_action. Tests TDD `tests/test_rl_network.py` (7 cas) validant forward pass, batching, masquage, gradient flow et intégration avec observations réelles. Suite complète `./venv/bin/python -m pytest -q` (229 tests) verte.
       - id: RL-006
         title: Entraînement (PPO/A2C) avec masques
         status: pending
