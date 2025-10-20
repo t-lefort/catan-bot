@@ -66,4 +66,6 @@ J'ai aussi arreté d'utiliser le mode "Plan" de Claude que j'avais testé et qui
 Je crois que les IA marche mieux quand on type les variables, là il ne la pas fait, j'imagine car ça n'utilise pas la dernière version de Python. Il faudrait préciser au début de setup l'environnement et que l'on utilise bien la dernière version stable du langage
 
 ## Etape 15
-Le développement en suivant le plan a l'air de bien se dérouler, la première version de la GUI fonctionne beaucoup mieux qu'à l'essai d'avant
+Le développement en suivant le plan a l'air de bien se dérouler, la première version de la GUI fonctionne beaucoup mieux qu'à l'essai d'avant.
+Il y a quand même pas mal de petit détail de règle qui n'étaient pas implémenté donc je lui demande au fur et à mesure, il faut que je pense à lui faire planifier avant de faire quand c'est une tâche qui n'était pas dans le plan.
+J'ai rapidement réussi à faire une partie complète, ce n'est pas encore parfait mais c'est pas mal !
