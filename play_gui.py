@@ -23,7 +23,7 @@ from typing import Dict, Tuple, Iterable, Optional
 import pygame
 
 from catan.app.game_service import GameService
-from catan.gui.app import CatanH2HApp, DiscardPrompt, BankTradePrompt
+from catan.gui.app import CatanH2HApp, DiscardPrompt, BankTradePrompt, YearOfPlentyPrompt
 from catan.gui.hud_controller import PlayerPanel
 from catan.gui.renderer import (
     COLOR_BG,
@@ -195,6 +195,45 @@ def main() -> int:
 
         confirm_rect = pygame.Rect(panel_rect.left + 16, panel_rect.bottom - 56, 140, 36)
         reset_rect = pygame.Rect(confirm_rect.right + 12, confirm_rect.top, 140, 36)
+
+        return {
+            "panel_rect": panel_rect,
+            "rows": rows,
+            "confirm_rect": confirm_rect,
+            "reset_rect": reset_rect,
+        }
+
+    def build_year_of_plenty_layout(prompt: YearOfPlentyPrompt) -> Dict[str, object]:
+        panel_width = 380
+        row_height = 42
+        padding = 16
+        rows_count = len(prompt.resource_order)
+        panel_height = padding * 3 + 30 + rows_count * row_height + 60
+
+        panel_rect = pygame.Rect(
+            SCREEN_WIDTH // 2 - panel_width // 2,
+            SCREEN_HEIGHT // 2 - panel_height // 2,
+            panel_width,
+            panel_height,
+        )
+
+        rows = []
+        for idx, resource in enumerate(prompt.resource_order):
+            row_top = panel_rect.top + padding + 30 + idx * row_height
+            label_pos = (panel_rect.left + 16, row_top + 8)
+            minus_rect = pygame.Rect(panel_rect.left + 250, row_top + 4, 32, 32)
+            plus_rect = pygame.Rect(panel_rect.left + 290, row_top + 4, 32, 32)
+            rows.append(
+                {
+                    "resource": resource,
+                    "label_pos": label_pos,
+                    "minus_rect": minus_rect,
+                    "plus_rect": plus_rect,
+                }
+            )
+
+        confirm_rect = pygame.Rect(panel_rect.left + 16, panel_rect.bottom - 56, 160, 40)
+        reset_rect = pygame.Rect(confirm_rect.right + 12, confirm_rect.top, 160, 40)
 
         return {
             "panel_rect": panel_rect,
@@ -387,6 +426,54 @@ def main() -> int:
         reset_label = small_font.render("Réinitialiser", True, (0, 0, 0))
         screen.blit(reset_label, reset_label.get_rect(center=reset_rect.center))
 
+    def render_year_of_plenty_panel(prompt: YearOfPlentyPrompt, layout: Dict[str, object]) -> None:
+        panel_rect: pygame.Rect = layout["panel_rect"]  # type: ignore[assignment]
+        pygame.draw.rect(screen, (45, 75, 105), panel_rect, border_radius=12)
+        pygame.draw.rect(screen, (20, 40, 60), panel_rect, width=3, border_radius=12)
+
+        title = font.render(f"Année d'Abondance — {prompt.player_name}", True, (255, 255, 255))
+        screen.blit(title, (panel_rect.left + 16, panel_rect.top + 8))
+
+        remaining_text = small_font.render(
+            f"Ressources à choisir: {prompt.remaining} / {prompt.required}", True, (230, 230, 230)
+        )
+        screen.blit(remaining_text, (panel_rect.left + 16, panel_rect.top + 36))
+
+        for row in layout["rows"]:  # type: ignore[assignment]
+            resource = row["resource"]
+            label_pos = row["label_pos"]
+            minus_rect: pygame.Rect = row["minus_rect"]
+            plus_rect: pygame.Rect = row["plus_rect"]
+
+            selected = prompt.selection.get(resource, 0)
+            label = f"{resource.title()}: {selected}"
+            label_surf = small_font.render(label, True, (210, 210, 210))
+            screen.blit(label_surf, label_pos)
+
+            pygame.draw.rect(screen, (70, 110, 140), minus_rect, border_radius=6)
+            pygame.draw.rect(screen, (20, 40, 60), minus_rect, width=2, border_radius=6)
+            minus_text = small_font.render("-", True, (255, 255, 255))
+            screen.blit(minus_text, minus_text.get_rect(center=minus_rect.center))
+
+            pygame.draw.rect(screen, (70, 110, 140), plus_rect, border_radius=6)
+            pygame.draw.rect(screen, (20, 40, 60), plus_rect, width=2, border_radius=6)
+            plus_text = small_font.render("+", True, (255, 255, 255))
+            screen.blit(plus_text, plus_text.get_rect(center=plus_rect.center))
+
+        confirm_rect: pygame.Rect = layout["confirm_rect"]  # type: ignore[assignment]
+        reset_rect: pygame.Rect = layout["reset_rect"]  # type: ignore[assignment]
+
+        confirm_color = (100, 180, 120) if prompt.can_confirm else (90, 90, 90)
+        pygame.draw.rect(screen, confirm_color, confirm_rect, border_radius=8)
+        pygame.draw.rect(screen, (20, 40, 60), confirm_rect, width=2, border_radius=8)
+        confirm_label = font.render("Valider", True, (0, 0, 0))
+        screen.blit(confirm_label, confirm_label.get_rect(center=confirm_rect.center))
+
+        pygame.draw.rect(screen, (160, 120, 70), reset_rect, border_radius=8)
+        pygame.draw.rect(screen, (20, 40, 60), reset_rect, width=2, border_radius=8)
+        reset_label = font.render("Annuler", True, (0, 0, 0))
+        screen.blit(reset_label, reset_label.get_rect(center=reset_rect.center))
+
     running = True
     ui_state = app.get_ui_state()
 
@@ -400,6 +487,11 @@ def main() -> int:
         bank_trade_layout: Optional[Dict[str, object]] = (
             build_bank_trade_layout(ui_state.bank_trade_prompt)
             if ui_state.mode == "bank_trade" and ui_state.bank_trade_prompt
+            else None
+        )
+        year_of_plenty_layout: Optional[Dict[str, object]] = (
+            build_year_of_plenty_layout(ui_state.year_of_plenty_prompt)
+            if ui_state.mode == "year_of_plenty" and ui_state.year_of_plenty_prompt
             else None
         )
 
@@ -436,6 +528,37 @@ def main() -> int:
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 pos = event.pos
+
+                # Gestion des clics sur le panneau Year of Plenty
+                if year_of_plenty_layout:
+                    handled = False
+                    for row in year_of_plenty_layout["rows"]:  # type: ignore[assignment]
+                        minus_rect: pygame.Rect = row["minus_rect"]
+                        plus_rect: pygame.Rect = row["plus_rect"]
+                        resource = row["resource"]
+                        if minus_rect.collidepoint(pos):
+                            if app.adjust_year_of_plenty_selection(resource, -1):
+                                ui_state_changed = True
+                            handled = True
+                            break
+                        if plus_rect.collidepoint(pos):
+                            if app.adjust_year_of_plenty_selection(resource, 1):
+                                ui_state_changed = True
+                            handled = True
+                            break
+                    if handled:
+                        continue
+
+                    confirm_rect: pygame.Rect = year_of_plenty_layout["confirm_rect"]  # type: ignore[assignment]
+                    reset_rect: pygame.Rect = year_of_plenty_layout["reset_rect"]  # type: ignore[assignment]
+                    if confirm_rect.collidepoint(pos):
+                        if app.confirm_year_of_plenty_selection():
+                            ui_state_changed = True
+                        continue
+                    if reset_rect.collidepoint(pos):
+                        if app.reset_year_of_plenty_selection():
+                            ui_state_changed = True
+                        continue
 
                 # Gestion des clics sur le panneau d'échange banque
                 if bank_trade_layout:
@@ -544,6 +667,11 @@ def main() -> int:
                 if ui_state.mode == "bank_trade" and ui_state.bank_trade_prompt
                 else None
             )
+            year_of_plenty_layout = (
+                build_year_of_plenty_layout(ui_state.year_of_plenty_prompt)
+                if ui_state.mode == "year_of_plenty" and ui_state.year_of_plenty_prompt
+                else None
+            )
 
         # Rendu principal
         screen.fill(COLOR_BG)
@@ -590,6 +718,8 @@ def main() -> int:
             render_discard_panel(ui_state.discard_prompt, discard_layout)
         if bank_trade_layout and ui_state.bank_trade_prompt:
             render_bank_trade_panel(ui_state.bank_trade_prompt, bank_trade_layout)
+        if year_of_plenty_layout and ui_state.year_of_plenty_prompt:
+            render_year_of_plenty_panel(ui_state.year_of_plenty_prompt, year_of_plenty_layout)
 
         pygame.display.flip()
         clock.tick(30)

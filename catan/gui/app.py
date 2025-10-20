@@ -33,7 +33,7 @@ from catan.gui.setup_controller import SetupController
 from catan.gui.trade_controller import TradeController
 from catan.gui.turn_controller import TurnController
 
-__all__ = ["ButtonState", "UIState", "DiscardPrompt", "BankTradePrompt", "CatanH2HApp"]
+__all__ = ["ButtonState", "UIState", "DiscardPrompt", "BankTradePrompt", "YearOfPlentyPrompt", "CatanH2HApp"]
 
 
 @dataclass(frozen=True)
@@ -59,6 +59,7 @@ class UIState:
     player_panels: Tuple[PlayerPanel, ...]
     discard_prompt: Optional["DiscardPrompt"]
     bank_trade_prompt: Optional["BankTradePrompt"]
+    year_of_plenty_prompt: Optional["YearOfPlentyPrompt"]
     buttons: Dict[str, ButtonState]
 
 
@@ -85,6 +86,18 @@ class BankTradePrompt:
     receive_selection: str | None
     hand: Dict[str, int]
     rates: Dict[str, int]
+    can_confirm: bool
+    resource_order: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class YearOfPlentyPrompt:
+    """Informations pour le panneau Year of Plenty."""
+
+    player_name: str
+    selection: Dict[str, int]
+    required: int
+    remaining: int
     can_confirm: bool
     resource_order: Tuple[str, ...]
 
@@ -126,6 +139,7 @@ class CatanH2HApp:
         self._bank_trade_give: Dict[str, int] = {}
         self._bank_trade_receive: Optional[str] = None
         self._road_building_edges: list[int] = []
+        self._year_of_plenty_selection: Dict[str, int] = {}
 
     # ------------------------------------------------------------------
     # Initialisation & synchronisation
@@ -168,6 +182,7 @@ class CatanH2HApp:
         self._bank_trade_give = {}
         self._bank_trade_receive = None
         self._road_building_edges = []
+        self._year_of_plenty_selection = {}
         self.refresh_state()
 
     @property
@@ -243,6 +258,10 @@ class CatanH2HApp:
             self.mode = "move_robber"
             return
 
+        # Préserver les modes interactifs utilisateur
+        if self.mode in {"bank_trade", "year_of_plenty", "select_road_building", "build_road", "build_settlement", "build_city"}:
+            return
+
         if self.mode == "setup":
             # Transition automatique vers le mode idle une fois le setup terminé
             self.mode = "idle"
@@ -302,6 +321,10 @@ class CatanH2HApp:
                 self._bank_trade_receive = None
                 self.mode = "idle"
                 return True
+            if self.mode == "year_of_plenty":
+                self._year_of_plenty_selection = {}
+                self.mode = "idle"
+                return True
             if self.mode == "select_road_building":
                 self._road_building_edges = []
                 self.mode = "idle"
@@ -318,16 +341,13 @@ class CatanH2HApp:
             return True
 
         if action == "play_year_of_plenty":
-            # Pour Year of Plenty, on doit demander à l'utilisateur quelles ressources choisir
-            # Pour l'instant, on choisit automatiquement les 2 premières ressources disponibles
+            # Ouvrir l'interface de sélection pour Year of Plenty
             assert self.development_controller is not None
             options = self.development_controller.get_legal_year_of_plenty_options()
             if not options:
                 return False
-            # Choisir la première option disponible
-            if not self.development_controller.handle_play_year_of_plenty(options[0]):
-                return False
-            self.refresh_state()
+            self.mode = "year_of_plenty"
+            self._year_of_plenty_selection = {}
             return True
 
         if action == "play_monopoly":
@@ -533,6 +553,67 @@ class CatanH2HApp:
             self.mode = "idle"
             self.refresh_state()
         return result
+
+    # ------------------------------------------------------------------
+    # Gestion Year of Plenty
+    # ------------------------------------------------------------------
+
+    def adjust_year_of_plenty_selection(self, resource: str, delta: int) -> bool:
+        """Ajuste la sélection de ressources pour Year of Plenty."""
+        if self.mode != "year_of_plenty":
+            return False
+        if resource not in RESOURCE_TYPES:
+            return False
+        if delta == 0:
+            return False
+
+        current_amount = self._year_of_plenty_selection.get(resource, 0)
+        total_selected = sum(self._year_of_plenty_selection.values())
+        required = 2  # Year of Plenty donne toujours 2 ressources
+
+        if delta > 0:
+            allowed = min(delta, required - total_selected)
+            if allowed <= 0:
+                return False
+            self._year_of_plenty_selection[resource] = current_amount + allowed
+            return True
+
+        removal = min(-delta, current_amount)
+        if removal <= 0:
+            return False
+        new_value = current_amount - removal
+        if new_value > 0:
+            self._year_of_plenty_selection[resource] = new_value
+        else:
+            self._year_of_plenty_selection.pop(resource, None)
+        return True
+
+    def reset_year_of_plenty_selection(self) -> bool:
+        """Réinitialise la sélection Year of Plenty."""
+        if self.mode != "year_of_plenty":
+            return False
+        self._year_of_plenty_selection = {}
+        return True
+
+    def confirm_year_of_plenty_selection(self) -> bool:
+        """Confirme et exécute Year of Plenty avec la sélection."""
+        if self.mode != "year_of_plenty":
+            return False
+        if sum(self._year_of_plenty_selection.values()) != 2:
+            return False
+
+        assert self.development_controller is not None
+
+        # Convertir la sélection au format attendu
+        selection = dict(self._year_of_plenty_selection)
+        success = self.development_controller.handle_play_year_of_plenty(selection)
+
+        if success:
+            self._year_of_plenty_selection = {}
+            self.mode = "idle"
+            self.refresh_state()
+
+        return success
 
     # ------------------------------------------------------------------
     # Gestion de l'échange banque
@@ -761,6 +842,22 @@ class CatanH2HApp:
                 resource_order=RESOURCE_TYPES,
             )
 
+        year_of_plenty_prompt: Optional[YearOfPlentyPrompt] = None
+        if self.mode == "year_of_plenty":
+            player = self.state.players[self.state.current_player_id]
+            required = 2
+            selected_total = sum(self._year_of_plenty_selection.values())
+            remaining = max(0, required - selected_total)
+
+            year_of_plenty_prompt = YearOfPlentyPrompt(
+                player_name=player.name,
+                selection=dict(self._year_of_plenty_selection),
+                required=required,
+                remaining=remaining,
+                can_confirm=remaining == 0 and required > 0,
+                resource_order=RESOURCE_TYPES,
+            )
+
         return UIState(
             mode=self.mode,
             phase=self.state.phase,
@@ -773,6 +870,7 @@ class CatanH2HApp:
             player_panels=player_panels,
             discard_prompt=discard_prompt,
             bank_trade_prompt=bank_trade_prompt,
+            year_of_plenty_prompt=year_of_plenty_prompt,
             buttons=buttons,
         )
 
@@ -811,6 +909,11 @@ class CatanH2HApp:
             elif num_selected == 1:
                 return f"{current_player.name} — Sélectionnez la 2ème route (Construction de routes)"
             return f"{current_player.name} — Construction de routes"
+        if self.mode == "year_of_plenty":
+            remaining = max(0, 2 - sum(self._year_of_plenty_selection.values()))
+            if remaining > 0:
+                return f"{current_player.name} — Sélectionnez {remaining} ressource(s) (Année d'Abondance)"
+            return f"{current_player.name} — Confirmez votre sélection (Année d'Abondance)"
 
         if not self.state.dice_rolled_this_turn:
             return f"{current_player.name} — Lancez les dés"
@@ -923,6 +1026,7 @@ class CatanH2HApp:
                 "move_robber",
                 "discard",
                 "bank_trade",
+                "year_of_plenty",
                 "select_road_building",
             },
         )

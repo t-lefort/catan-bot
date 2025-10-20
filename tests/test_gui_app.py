@@ -436,3 +436,59 @@ def test_road_building_interactive_selection(gui_app):
     assert app.mode == "idle"
     updated_player = app.state.players[current_id]
     assert updated_player.dev_cards["ROAD_BUILDING"] == 0
+
+
+def test_year_of_plenty_interactive_selection(gui_app):
+    """La carte Year of Plenty doit permettre au joueur de choisir 2 ressources."""
+
+    app = gui_app
+    _complete_setup(app)
+
+    assert app.trigger_action("roll_dice", forced_value=4)
+
+    current_id = app.state.current_player_id
+    player = app.state.players[current_id]
+
+    # Noter les ressources initiales
+    initial_lumber = player.resources.get("LUMBER", 0)
+    initial_brick = player.resources.get("BRICK", 0)
+
+    # Donner une carte Year of Plenty au joueur
+    player.dev_cards["YEAR_OF_PLENTY"] = 1
+    player.new_dev_cards["YEAR_OF_PLENTY"] = 0
+    app.refresh_state()
+
+    # Déclencher l'action Year of Plenty
+    assert app.trigger_action("play_year_of_plenty")
+    assert app.mode == "year_of_plenty"
+
+    # Vérifier que le prompt est créé
+    ui_state = app.get_ui_state()
+    assert ui_state.year_of_plenty_prompt is not None
+    assert ui_state.year_of_plenty_prompt.required == 2
+    assert ui_state.year_of_plenty_prompt.remaining == 2
+    assert not ui_state.year_of_plenty_prompt.can_confirm
+
+    # Sélectionner 1 bois (LUMBER)
+    assert app.adjust_year_of_plenty_selection("LUMBER", 1)
+    ui_state = app.get_ui_state()
+    assert ui_state.year_of_plenty_prompt.remaining == 1
+    assert ui_state.year_of_plenty_prompt.selection.get("LUMBER", 0) == 1
+    assert not ui_state.year_of_plenty_prompt.can_confirm
+
+    # Sélectionner 1 brique
+    assert app.adjust_year_of_plenty_selection("BRICK", 1)
+    ui_state = app.get_ui_state()
+    assert ui_state.year_of_plenty_prompt.remaining == 0
+    assert ui_state.year_of_plenty_prompt.selection.get("BRICK", 0) == 1
+    assert ui_state.year_of_plenty_prompt.can_confirm
+
+    # Confirmer la sélection
+    assert app.confirm_year_of_plenty_selection()
+    assert app.mode == "idle"
+
+    # Vérifier que le joueur a reçu les ressources
+    updated_player = app.state.players[current_id]
+    assert updated_player.resources.get("LUMBER", 0) == initial_lumber + 1
+    assert updated_player.resources.get("BRICK", 0) == initial_brick + 1
+    assert updated_player.dev_cards["YEAR_OF_PLENTY"] == 0
