@@ -11,14 +11,14 @@
 #
 version: 1
 plan_name: "CatanBot 1v1 — Plan complet"
-last_updated: 2025-10-20T17:05:00Z
+last_updated: 2025-10-20T18:05:00Z
 owner: "Thomas + Agent"
 
 status_summary:
   total: 66
-  pending: 18
+  pending: 17
   in_progress: 0
-  completed: 41
+  completed: 42
   blocked: 0
 
 # ID de la tâche actuellement en cours (ou null s'il n'y en a pas)
@@ -519,11 +519,16 @@ sections:
           2025-10-19T21:01Z: Implémentation terminée — ajout HeadlessEnv.clone()/snapshot + support action_catalog dans reset, nouveaux tests `tests/test_sim_headless.py` (9 cas) vérifiant trajectoires identiques et restauration RNG. `python3 -m pytest tests/test_sim_headless.py -q` vert.
       - id: SIM-003
         title: Parallélisation rollouts
-        status: pending
+        status: completed
         priority: P1
         dependencies: [SIM-001]
         acceptance_criteria:
           - "N workers indépendants, agrégation métriques"
+        notes: |
+          2025-10-20T17:40Z: Session en cours — implémentation runner parallèle + tests agrégation.
+          2025-10-20T18:04Z: Livré `catan.sim.parallel.ParallelRolloutRunner` + résumés immuables.
+            - Tests ajoutés `tests/test_sim_parallel.py` (4 cas) couvrant distribution, seeds et repro.
+            - Suite complète `./venv/bin/pytest -q` (217 tests) verte.
       - id: SIM-004
         title: KPIs et traces compactes
         status: pending
